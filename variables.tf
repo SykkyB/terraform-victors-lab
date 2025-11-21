@@ -16,6 +16,12 @@ variable "ssh_key_name" {
   default     = "aws_key"
 }
 
+variable "region" {
+  description = "aws region"
+  type        = string
+  default     = "us-east-2"
+}
+
 variable "ssh_public_key" {
   description = "SSH public key"
   type        = string

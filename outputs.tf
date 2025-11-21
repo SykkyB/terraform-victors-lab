@@ -32,13 +32,9 @@ output "ssh_bastion_connection_command" {
 
 output "ssh-webserver_connection_command" {
   description = "SSH command to connect via NLB"
-  value       = "ssh ubuntu@${aws_instance.web-server.private_ip}"
+  value       = "ssh spiderman@${aws_instance.web-server.private_ip}"
 }
 
-output "http_url_via_nlb" {
-  description = "HTTP URL to access the web server through NLB"
-  value       = "http://${aws_lb.nlb.dns_name}"
-}
 
 # ---------------- S3 + CloudFront ----------------
 
@@ -59,16 +55,13 @@ output "cloudfront_url" {
 
 # ---------------- Application Connection Info ----------------
 
-output "web_server_direct_http" {
-  description = "Direct HTTP URL to EC2 (bypassing NLB)"
-  value       = "http://${aws_instance.web-server.public_ip}"
+output "alb_dns_name" {
+  description = "DNS name of the public ALB"
+  value       = aws_lb.alb.dns_name
 }
 
-
-output "web_server_connection_info" {
-  description = "Summary of connection info for your web server"
-  value = {
-    nlb_url        = "http://${aws_lb.nlb.dns_name}"
-    cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/"
-  }
+output "web_server_public_url" {
+  description = "Public URL to access your private web server via ALB"
+  value       = "http://${aws_lb.alb.dns_name}/"
 }
+

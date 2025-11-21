@@ -4,6 +4,9 @@ data "aws_availability_zones" "available" {
 
 resource "aws_vpc" "victors_lab_vpc" {
   cidr_block = "10.0.0.0/16"
+
+  enable_dns_support   = true
+  enable_dns_hostnames = true
   tags = {
     Name = "victors_lab_vpc"
   }
@@ -17,11 +20,29 @@ resource "aws_subnet" "public" {
   tags                    = { Name = "public subnet" }
 }
 
+resource "aws_subnet" "public_2" {
+  vpc_id                  = aws_vpc.victors_lab_vpc.id
+  cidr_block              = "10.0.2.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[1] # second AZ
+  map_public_ip_on_launch = true
+
+  tags = { Name = "public-subnet-2" }
+}
+
 resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.victors_lab_vpc.id
   cidr_block        = "10.0.1.0/24"
   availability_zone = data.aws_availability_zones.available.names[1]
   tags              = { Name = "private subnet" }
+}
+
+resource "aws_subnet" "private_2" {
+  vpc_id                  = aws_vpc.victors_lab_vpc.id
+  cidr_block              = "10.0.3.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[2]
+  map_public_ip_on_launch = false
+
+  tags = { Name = "private-subnet-2" }
 }
 
 resource "aws_internet_gateway" "igw" {
@@ -48,6 +69,10 @@ resource "aws_route_table_association" "private_assoc" {
   route_table_id = aws_route_table.private_rt.id
 }
 
+resource "aws_route_table_association" "private_2_assoc" {
+  subnet_id      = aws_subnet.private_2.id
+  route_table_id = aws_route_table.private_rt.id
+}
 
 resource "aws_route_table" "public_rt" {
   vpc_id = aws_vpc.victors_lab_vpc.id
@@ -63,6 +88,10 @@ resource "aws_route_table_association" "public_assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
+resource "aws_route_table_association" "public_2_assoc" {
+  subnet_id      = aws_subnet.public_2.id
+  route_table_id = aws_route_table.public_rt.id
+}
 
 
 resource "aws_key_pair" "deployer" {
@@ -248,6 +277,112 @@ resource "aws_security_group" "sg_http" {
   }
 }
 
+resource "aws_security_group" "sg_alb" {
+  name        = "alb-sg"
+  description = "Allow HTTP/HTTPS from Internet"
+  vpc_id      = aws_vpc.victors_lab_vpc.id
+
+  ingress {
+    description = "Allow HTTP from anywhere"
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    description = "Allow HTTPS from anywhere"
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "alb-sg"
+  }
+}
+
+resource "aws_security_group_rule" "allow_alb_http" {
+  type                     = "ingress"
+  from_port                = 80
+  to_port                  = 80
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.sg_ssh.id # private web-server SG
+  source_security_group_id = aws_security_group.sg_alb.id
+}
+
+resource "aws_security_group_rule" "allow_alb_https" {
+  type                     = "ingress"
+  from_port                = 443
+  to_port                  = 443
+  protocol                 = "tcp"
+  security_group_id        = aws_security_group.sg_ssh.id # private web-server SG
+  source_security_group_id = aws_security_group.sg_alb.id
+}
+
+resource "aws_lb" "alb" {
+  name               = "web-server-alb"
+  load_balancer_type = "application"
+  subnets = [
+    aws_subnet.public.id,
+    aws_subnet.public_2.id
+  ]
+  security_groups = [aws_security_group.sg_alb.id]
+
+  enable_deletion_protection = false
+  idle_timeout               = 60
+
+  tags = {
+    Name = "web-server-alb"
+  }
+}
+
+
+
+resource "aws_lb_target_group" "web_tg" {
+  name        = "web-server-tg"
+  port        = 80
+  protocol    = "HTTP"
+  vpc_id      = aws_vpc.victors_lab_vpc.id
+  target_type = "instance"
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+}
+
+
+resource "aws_lb_target_group_attachment" "web_attachment" {
+  target_group_arn = aws_lb_target_group.web_tg.arn
+  target_id        = aws_instance.web-server.id
+  port             = 80
+}
+
+resource "aws_lb_listener" "alb_listener_http" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_tg.arn
+  }
+}
+
+
 
 resource "aws_lb" "nlb" {
   name               = "ssh-forward-nlb"
@@ -283,6 +418,14 @@ resource "aws_lb_listener" "ssh_listener" {
   }
 }
 
+
+resource "aws_vpc_endpoint" "s3" {
+  vpc_id       = aws_vpc.victors_lab_vpc.id
+  service_name = "com.amazonaws.${var.region}.s3"
+  route_table_ids = [
+    aws_route_table.private_rt.id
+  ]
+}
 
 resource "aws_s3_bucket" "static_web_site_bucket" {
   bucket = "alexrachok-terraform-web-site-static-content"

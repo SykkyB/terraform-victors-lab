@@ -1,0 +1,35 @@
+### Ignore Terraform state files
+*.tfstate
+*.tfstate.*
+*.tfvars
+*.tfvars.json
+
+# Crash logs
+crash.log
+crash.*.log
+
+# Terraform local working directory
+.terraform/
+.terraform.lock.hcl
+
+# Terraform plan files
+tfplan
+*.plan
+
+# Sensitive files
+/keys/
+/secrets/
+/private/
+
+# AWS credentials accidentally created locally
+.aws/
+credentials
+config
+
+# Editor / IDE files
+.vscode/
+.idea/
+*.swp
+
+# macOS system files
+.DS_Store

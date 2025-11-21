@@ -1,30 +1,107 @@
+data "aws_availability_zones" "available" {
+
+}
+
+resource "aws_vpc" "victors_lab_vpc" {
+  cidr_block = "10.0.0.0/16"
+  tags = {
+    Name = "victors_lab_vpc"
+  }
+}
+
+resource "aws_subnet" "public" {
+  vpc_id                  = aws_vpc.victors_lab_vpc.id
+  cidr_block              = "10.0.0.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = true
+  tags                    = { Name = "public subnet" }
+}
+
+resource "aws_subnet" "private" {
+  vpc_id            = aws_vpc.victors_lab_vpc.id
+  cidr_block        = "10.0.1.0/24"
+  availability_zone = data.aws_availability_zones.available.names[1]
+  tags              = { Name = "private subnet" }
+}
+
+resource "aws_internet_gateway" "igw" {
+  vpc_id = aws_vpc.victors_lab_vpc.id
+  tags   = { Name = "victors_lab_igw" }
+}
+
+resource "aws_route_table" "private_rt" {
+  vpc_id = aws_vpc.victors_lab_vpc.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.nat.id
+  }
+
+  tags = {
+    Name = "private-rt"
+  }
+}
+
+
+resource "aws_route_table_association" "private_assoc" {
+  subnet_id      = aws_subnet.private.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
+
+resource "aws_route_table" "public_rt" {
+  vpc_id = aws_vpc.victors_lab_vpc.id
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.igw.id
+  }
+  tags = { Name = "public-rt" }
+}
+
+resource "aws_route_table_association" "public_assoc" {
+  subnet_id      = aws_subnet.public.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
+
+
 resource "aws_key_pair" "deployer" {
   key_name   = var.ssh_key_name
   public_key = var.ssh_public_key
 }
 
-data "aws_vpc" "default" {
-  default = true
+resource "aws_eip" "nat_eip" {
+  domain = "vpc"
 }
 
-data "aws_subnets" "default" {
-  filter {
-    name   = "vpc-id"
-    values = [data.aws_vpc.default.id]
+resource "aws_nat_gateway" "nat" {
+  allocation_id = aws_eip.nat_eip.id
+  subnet_id     = aws_subnet.public.id
+
+  tags = {
+    Name = "victors_lab_nat"
   }
 }
 
+
 resource "aws_security_group" "sg_ssh" {
-  #name        = "sg-ssh"
-  description = "Allow SSH from NLB"
-  vpc_id      = data.aws_vpc.default.id
+  description = "Allow SSH and ICMP from Bastion"
+  vpc_id      = aws_vpc.victors_lab_vpc.id
 
   ingress {
-    description     = "Allow SSH from NLB"
+    description     = "Allow SSH from bastion"
     protocol        = "tcp"
     from_port       = 22
     to_port         = 22
-    security_groups = [aws_security_group.sg_nlb.id]
+    security_groups = [aws_security_group.sg_bastion.id]
+  }
+
+  ingress {
+    description     = "Allow ping from bastion"
+    protocol        = "icmp"
+    from_port       = -1
+    to_port         = -1
+    security_groups = [aws_security_group.sg_bastion.id]
   }
 
   egress {
@@ -37,9 +114,8 @@ resource "aws_security_group" "sg_ssh" {
 
 
 resource "aws_security_group" "sg_nlb" {
-  #name        = "sg-nlb"
   description = "Allow inbound on port 2000"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_vpc.victors_lab_vpc.id
 
   ingress {
     description = "Allow SSH forwarding"
@@ -57,6 +133,54 @@ resource "aws_security_group" "sg_nlb" {
   }
 }
 
+resource "aws_security_group" "sg_bastion" {
+  description = "Bastion SG"
+  vpc_id      = aws_vpc.victors_lab_vpc.id
+
+  # allow SSH from the NLB SG (NLB will forward from allowed_cidr)
+  ingress {
+    description     = "Allow SSH from NLB"
+    protocol        = "tcp"
+    from_port       = 22
+    to_port         = 22
+    security_groups = [aws_security_group.sg_nlb.id]
+  }
+
+  # optional: allow SSH from your allowed_cidr directly (if you want direct SSH bypassing NLB)
+  # ingress {
+  #   description = "Allow SSH from admin CIDR (optional)"
+  #   protocol    = "tcp"
+  #   from_port   = 22
+  #   to_port     = 22
+  #   cidr_blocks = [var.allowed_cidr]
+  # }
+
+  egress {
+    description = "Allow all outbound"
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_instance" "bastion" {
+  ami           = var.instance_ami
+  instance_type = var.instance_type
+  key_name      = aws_key_pair.deployer.key_name
+
+  subnet_id = aws_subnet.public.id
+
+  vpc_security_group_ids = [
+    aws_security_group.sg_bastion.id
+  ]
+
+  tags = {
+    Name = "bastion-host"
+    os   = "ubuntu-22"
+  }
+}
+
 
 resource "aws_instance" "web-server" {
   depends_on = [
@@ -68,6 +192,9 @@ resource "aws_instance" "web-server" {
   ami           = var.instance_ami
   instance_type = var.instance_type
   key_name      = aws_key_pair.deployer.key_name
+
+  subnet_id = aws_subnet.private.id
+
   vpc_security_group_ids = [
     aws_security_group.sg_ssh.id,
     aws_security_group.sg_https.id,
@@ -84,6 +211,9 @@ resource "aws_instance" "web-server" {
 
 
 resource "aws_security_group" "sg_https" {
+  description = "Allow HTTPS from allowed CIDR"
+  vpc_id      = aws_vpc.victors_lab_vpc.id
+
   ingress {
     cidr_blocks = [var.allowed_cidr]
     protocol    = "tcp"
@@ -100,6 +230,9 @@ resource "aws_security_group" "sg_https" {
 }
 
 resource "aws_security_group" "sg_http" {
+  description = "Allow HTTP from allowed CIDR"
+  vpc_id      = aws_vpc.victors_lab_vpc.id
+
   ingress {
     cidr_blocks = [var.allowed_cidr]
     protocol    = "tcp"
@@ -119,7 +252,7 @@ resource "aws_security_group" "sg_http" {
 resource "aws_lb" "nlb" {
   name               = "ssh-forward-nlb"
   load_balancer_type = "network"
-  subnets            = data.aws_subnets.default.ids
+  subnets            = [aws_subnet.public.id]
   security_groups    = [aws_security_group.sg_nlb.id]
 }
 
@@ -128,14 +261,13 @@ resource "aws_lb_target_group" "ssh_target" {
   name        = "ssh-target"
   port        = 22
   protocol    = "TCP"
-  vpc_id      = data.aws_vpc.default.id
+  vpc_id      = aws_vpc.victors_lab_vpc.id
   target_type = "instance"
 }
 
-
-resource "aws_lb_target_group_attachment" "ssh_attachment" {
+resource "aws_lb_target_group_attachment" "ssh_attachment_bastion" {
   target_group_arn = aws_lb_target_group.ssh_target.arn
-  target_id        = aws_instance.web-server.id
+  target_id        = aws_instance.bastion.id
   port             = 22
 }
 

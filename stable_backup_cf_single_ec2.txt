@@ -1,11 +1,11 @@
 test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com
 postgres_admin
 DU9AZNAFx7IxxsfRb2P4
-psql "host=test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com port=5432 user=postgres_admin dbname=postgres password= DU9AZNAFx7IxxsfRb2P4"
+psql "host=test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com port=5432 user=postgres_admin dbname=postgres password=DU9AZNAFx7IxxsfRb2P4"
 psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres
 
-PGPASSWORD= DU9AZNAFx7IxxsfRb2P4 psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -f /tmp/db.sql.dump
-
+PGPASSWORD=DU9AZNAFx7IxxsfRb2P4 psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -f /tmp/db.sql.dump
+PGPASSWORD= DU9AZNAFx7IxxsfRb2P4 pg_dump -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -F p -f /tmp/db_backup.sql_new
 
 pg_dump -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -F c -f my_backup.dump
         -U <your_username> \
@@ -14,7 +14,58 @@ pg_dump -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres
         -f my_backup.dump
 
 
-PGPASSWORD=y DU9AZNAFx7IxxsfRb2P4 pg_restore -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -v /tmp/db.sql.dump
+PGPASSWORD=DU9AZNAFx7IxxsfRb2P4 psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -c "CREATE DATABASE cryptodb;"
+
+
+PGPASSWORD=DU9AZNAFx7IxxsfRb2P4 pg_restore -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -v /tmp/db.sql.dump
+PGPASSWORD=DU9AZNAFx7IxxsfRb2P4 pg_restore -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d cryptodb -f /tmp/db.sql.dump
+
+ssh -i keys/aws_key -o "ProxyJump=ubuntu@ssh-forward-nlb-63864b2dbd05ad60.elb.us-east-2.amazonaws.com:2000" spiderman@10.0.1.166
+
+PGPASSWORD="DU9AZNAFx7IxxsfRb2P4" psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres
+
+php -r '
+$conn = pg_connect("host=test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com dbname=postgres user=postgres_admin password= DU9AZNAFx7IxxsfRb2P4");
+if (!$conn) { echo "Connection failed\n"; exit(1); }
+$res = pg_query($conn, "SELECT * FROM crypto_rates");
+while ($row = pg_fetch_assoc($res)) { print_r($row); }
+pg_close($conn);
+'
+
+
+
+
+ - |
+    sudo tee /etc/systemd/system/crypto_updater.service > /dev/null << 'EOF'
+    [Unit]
+    Description=Crypto Rates Updater
+    After=network.target
+
+    [Service]
+    Type=simple
+    User=spiderman
+    ExecStart=/usr/bin/python3 /opt/crypto_updater/crypto_updater.py
+    Restart=always
+    Environment="DB_HOST=${db_host}" "DB_PORT=5432" "DB_NAME=${db_name}" "DB_USER=${db_user}" "DB_PASS=${db_password}"
+    Environment=PYTHONUNBUFFERED=1
+
+    [Install]
+    WantedBy=multi-user.target
+    EOF
+  - sudo systemctl daemon-reload
+  - sudo systemctl enable crypto_updater.service
+  - sudo systemctl start crypto_updater.service
+
+
+
+
+
+
+
+
+
+
+
 
 
 resource "aws_key_pair" "deployer" {

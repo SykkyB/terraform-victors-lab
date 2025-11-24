@@ -213,6 +213,7 @@ resource "aws_instance" "bastion" {
 
 resource "aws_instance" "web-server" {
   depends_on = [
+    aws_db_instance.postgres,
     aws_s3_object.index,
     aws_s3_object.site1_image,
     aws_cloudfront_distribution.cdn
@@ -229,7 +230,12 @@ resource "aws_instance" "web-server" {
     aws_security_group.sg_https.id,
     aws_security_group.sg_http.id
   ]
-  user_data            = file("apache-mkdocs.yaml")
+  user_data = templatefile("${path.module}/apache-mkdocs.yaml.tpl", {
+    db_user     = var.db_user
+    db_password = var.db_password
+    db_name     = var.db_name
+    db_host     = aws_db_instance.postgres.address
+  })
   iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
 
   tags = {

@@ -49,31 +49,18 @@ runcmd:
   - sudo DEBIAN_FRONTEND=noninteractive apt install -y postgresql-client-17
   - sudo apt-get install -y python3 python3-pip
   - sudo pip3 install psycopg2-binary requests
+  - sudo apt install libapache2-mod-php -y
   - sudo mkdir -p /opt/crypto_updater
   - sudo aws s3 cp s3://alexrachok-terraform-web-site-static-content/web_site2/crypto_updater.py /opt/crypto_updater/crypto_updater.py
   - sudo chmod +x /opt/crypto_updater/crypto_updater.py
-  - |
-    sudo tee /etc/systemd/system/crypto_updater.service > /dev/null << 'EOF'
-    [Unit]
-    Description=Crypto Rates Updater
-    After=network.target
 
-    [Service]
-    Type=simple
-    User=spiderman
-    ExecStart=/usr/bin/python3 /opt/crypto_updater/crypto_updater.py
-    Restart=always
-    Environment="DB_HOST=${db_host}" "DB_PORT=5432" "DB_NAME=${db_name}" "DB_USER=${db_user}" "DB_PASS=${db_password}"
-    Environment=PYTHONUNBUFFERED=1
-
-    [Install]
-    WantedBy=multi-user.target
-    EOF
-  - sudo systemctl daemon-reload
-  - sudo systemctl enable crypto_updater.service
-  - sudo systemctl start crypto_updater.service
   - sudo aws s3 cp s3://alexrachok-terraform-web-site-static-content/web_site2/db_backup.dump /tmp/db.sql.dump
-  - sudo PGPASSWORD="${db_password}" pg_restore -h ${aws_db_instance.postgres.address} -U ${db_user} -d ${db_name} -v /tmp/db.sql.dump
+
+
+  - sudo PGPASSWORD='${db_password}' psql -h ${db_host} -U ${db_user} -d postgres -c "CREATE DATABASE ${db_name};"
+  - sudo PGPASSWORD='${db_password}' psql -h ${db_host} -U ${db_user} -d postgres -f /tmp/db.sql.dump
+
+
   - sudo systemctl restart apache2
 
   

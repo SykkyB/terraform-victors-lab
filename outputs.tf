@@ -1,23 +1,3 @@
-output "instance_id" {
-  description = "EC2 instance ID"
-  value       = aws_instance.web-server.id
-}
-
-output "instance_az" {
-  description = "Availability Zone of the EC2 instance"
-  value       = aws_instance.web-server.availability_zone
-}
-
-output "instance_subnet" {
-  description = "Subnet ID where the EC2 instance is deployed"
-  value       = aws_instance.web-server.subnet_id
-}
-
-output "instance_security_group" {
-  description = "Security group attached to EC2 instance"
-  value       = aws_instance.web-server.vpc_security_group_ids
-}
-
 # ---------------- NLB ----------------
 
 output "nlb_dns_name" {
@@ -38,7 +18,7 @@ output "ssh-webserver_connection_command" {
 
 output "ssh-webserver_connection_command_keys_forwarded" {
   description = "SSH command to webserver with forwarding keys"
-  value       = "ssh -p 2000 -i keys/aws_key -J ubuntu@${aws_lb.nlb.dns_name} spiderman@${aws_instance.web-server.private_ip}"
+  value       = "ssh -i keys/aws_key -o \"ProxyJump=ubuntu@${aws_lb.nlb.dns_name}:2000\"spiderman@${aws_instance.web-server.private_ip}"
 }
 
 
@@ -48,11 +28,6 @@ output "ssh-webserver_connection_command_keys_forwarded" {
 output "s3_bucket_name" {
   description = "The name of the S3 bucket hosting static website content"
   value       = aws_s3_bucket.static_web_site_bucket.bucket
-}
-
-output "cloudfront_domain_name" {
-  description = "CloudFront distribution domain name"
-  value       = aws_cloudfront_distribution.cdn.domain_name
 }
 
 output "cloudfront_url" {

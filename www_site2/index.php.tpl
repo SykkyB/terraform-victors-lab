@@ -14,33 +14,33 @@ $db_conn = pg_connect($conn_string);
 if (!$db_conn) {
     $db_status = "❌ Failed to connect to Postgres DB: " . pg_last_error();
     $latest_text = "";
+    $history_text = "";
 } else {
     $db_status = "✅ Postgres DB connected successfully.";
 
     // ---------------------------
     // Fetch Latest Crypto Rates
     // ---------------------------
-    $query = "
+    $query_latest = "
         SELECT *
         FROM public.crypto_rates
         ORDER BY rate_date DESC, rate_time DESC
         LIMIT 1;
     ";
+    $result_latest = pg_query($db_conn, $query_latest);
 
-    $result = pg_query($db_conn, $query);
-
-    if (!$result) {
+    if (!$result_latest) {
         $latest_text = "Query failed: " . pg_last_error();
-    } elseif (pg_num_rows($result) == 0) {
+    } elseif (pg_num_rows($result_latest) == 0) {
         $latest_text = "No crypto rates found.";
     } else {
-        $row = pg_fetch_assoc($result);
+        $row = pg_fetch_assoc($result_latest);
         $latest_text = "
             <div class='db-box'>
                 <h2>Latest Crypto Rates</h2>
-                <table border='1' cellpadding='8' cellspacing='0' style='border-collapse: collapse; width: 100%; text-align: center;'>
+                <table>
                     <thead>
-                        <tr style='background: #eef7ff;'>
+                        <tr>
                             <th>Date</th>
                             <th>Time</th>
                             <th>BTC/USD</th>
@@ -56,6 +56,56 @@ if (!$db_conn) {
                             <td>{$row['eth_usd']}</td>
                             <td>{$row['sol_usd']}</td>
                         </tr>
+                    </tbody>
+                </table>
+            </div>
+        ";
+    }
+
+    // ---------------------------
+    // Fetch Previous 10 Records
+    // ---------------------------
+    $query_history = "
+        SELECT *
+        FROM public.crypto_rates
+        ORDER BY rate_date DESC, rate_time DESC
+        OFFSET 1
+        LIMIT 10;
+    ";
+    $result_history = pg_query($db_conn, $query_history);
+
+    if (!$result_history) {
+        $history_text = "Query failed: " . pg_last_error();
+    } elseif (pg_num_rows($result_history) == 0) {
+        $history_text = "No historical crypto rates found.";
+    } else {
+        $history_text = "
+            <div class='db-box'>
+                <h2>Exchange Rate History (Previous 10 Records)</h2>
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Date</th>
+                            <th>Time</th>
+                            <th>BTC/USD</th>
+                            <th>ETH/USD</th>
+                            <th>SOL/USD</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        ";
+        while ($row_hist = pg_fetch_assoc($result_history)) {
+            $history_text .= "
+                <tr>
+                    <td>{$row_hist['rate_date']}</td>
+                    <td>{$row_hist['rate_time']}</td>
+                    <td>{$row_hist['btc_usd']}</td>
+                    <td>{$row_hist['eth_usd']}</td>
+                    <td>{$row_hist['sol_usd']}</td>
+                </tr>
+            ";
+        }
+        $history_text .= "
                     </tbody>
                 </table>
             </div>
@@ -108,6 +158,7 @@ if (!$db_conn) {
     th, td {
       padding: 8px;
       border: 1px solid #ccc;
+      text-align: center;
     }
 
     th {
@@ -132,6 +183,8 @@ if (!$db_conn) {
     </div>
 
     <?= $latest_text ?>
+
+    <?= $history_text ?>
   </div>
 </body>
 </html>

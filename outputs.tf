@@ -18,7 +18,7 @@ output "ssh-webserver_connection_command" {
 
 output "ssh-webserver_connection_command_keys_forwarded" {
   description = "SSH command to webserver with forwarding keys"
-  value       = "ssh -i keys/aws_key -o \"ProxyJump=ubuntu@${aws_lb.nlb.dns_name}:2000\"spiderman@${aws_instance.web-server.private_ip}"
+  value       = "ssh -i keys/aws_key -o \"ProxyJump=ubuntu@${aws_lb.nlb.dns_name}:2000\" spiderman@${aws_instance.web-server.private_ip}"
 }
 
 

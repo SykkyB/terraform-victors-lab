@@ -1,3 +1,22 @@
+test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com
+postgres_admin
+DU9AZNAFx7IxxsfRb2P4
+psql "host=test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com port=5432 user=postgres_admin dbname=postgres password= DU9AZNAFx7IxxsfRb2P4"
+psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres
+
+PGPASSWORD= DU9AZNAFx7IxxsfRb2P4 psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -f /tmp/db.sql.dump
+
+
+pg_dump -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -F c -f my_backup.dump
+        -U <your_username> \
+        -d <your_dbname> \
+        -F c \
+        -f my_backup.dump
+
+
+PGPASSWORD=y DU9AZNAFx7IxxsfRb2P4 pg_restore -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -v /tmp/db.sql.dump
+
+
 resource "aws_key_pair" "deployer" {
   key_name   = var.ssh_key_name
   public_key = var.ssh_public_key

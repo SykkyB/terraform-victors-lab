@@ -238,6 +238,26 @@ resource "aws_instance" "web-server" {
   }
 }
 
+resource "aws_security_group" "sg_rds" {
+  name        = "rds-sg"
+  description = "Allow Postgres from web-server"
+  vpc_id      = aws_vpc.victors_lab_vpc.id
+
+  ingress {
+    protocol        = "tcp"
+    from_port       = 5432
+    to_port         = 5432
+    security_groups = [aws_security_group.sg_ssh.id] # web-server SG
+  }
+
+  egress {
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 
 resource "aws_security_group" "sg_https" {
   description = "Allow HTTPS from allowed CIDR"
@@ -460,6 +480,28 @@ resource "aws_s3_object" "site1_image" {
   etag   = filemd5("www_site1/test_site_image.jpg")
 }
 
+resource "aws_s3_object" "site2_image" {
+  bucket = aws_s3_bucket.static_web_site_bucket.bucket
+  key    = "web_site2/images/crypto.jpg"
+  source = "www_site2/crypto.jpg"
+  etag   = filemd5("www_site2/crypto.jpg")
+}
+
+resource "aws_s3_object" "db_backup" {
+  bucket = aws_s3_bucket.static_web_site_bucket.bucket
+  key    = "web_site2/db_backup.dump"
+  source = "www_site2/my_backup.dump"
+  etag   = filemd5("www_site2/my_backup.dump")
+}
+
+resource "aws_s3_object" "crypto_updater_script" {
+  bucket = aws_s3_bucket.static_web_site_bucket.bucket
+  key    = "web_site2/crypto_updater.py"
+  source = "www_site2/crypto_updater.py"
+  etag   = filemd5("www_site2/crypto_updater.py")
+}
+
+
 resource "aws_s3_object" "index" {
   bucket = aws_s3_bucket.static_web_site_bucket.bucket
   key    = "index.html"
@@ -473,6 +515,30 @@ resource "aws_s3_object" "index" {
     cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/"
   }))
 }
+
+resource "aws_s3_object" "php_index" {
+  bucket = aws_s3_bucket.static_web_site_bucket.bucket
+  key    = "web_site2/index.php"
+
+  content = templatefile("${path.module}/www_site2/index.php.tpl", {
+    cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/"
+    db_host        = aws_db_instance.postgres.address
+    db_name        = var.db_name
+    db_user        = var.db_user
+    db_pass        = var.db_password
+  })
+
+  content_type = "application/x-httpd-php"
+
+  etag = md5(templatefile("${path.module}/www_site2/index.php.tpl", {
+    cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/"
+    db_host        = aws_db_instance.postgres.address
+    db_name        = var.db_name
+    db_user        = var.db_user
+    db_pass        = var.db_password
+  }))
+}
+
 
 resource "aws_iam_role" "ec2_role" {
   name = "ec2_s3_access_role"
@@ -599,5 +665,29 @@ resource "aws_cloudfront_distribution" "cdn" {
   viewer_certificate {
     cloudfront_default_certificate = true
   }
+}
+
+resource "aws_db_subnet_group" "db_subnets" {
+  name       = "postgress-db-subnet-group"
+  subnet_ids = [aws_subnet.private.id, aws_subnet.private_2.id]
+
+  tags = {
+    Name = "db-subnet-group"
+  }
+}
+
+resource "aws_db_instance" "postgres" {
+  identifier             = "test-postgres-db"
+  engine                 = "postgres"
+  instance_class         = "db.t4g.micro"
+  allocated_storage      = 20
+  username               = var.db_user
+  password               = var.db_password
+  db_name                = var.db_name
+  publicly_accessible    = false
+  vpc_security_group_ids = [aws_security_group.sg_rds.id]
+  db_subnet_group_name   = aws_db_subnet_group.db_subnets.name
+
+  skip_final_snapshot = true # If you want final snapshot, set to false
 }
 

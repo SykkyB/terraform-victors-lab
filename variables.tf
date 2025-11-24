@@ -33,3 +33,19 @@ variable "allowed_cidr" {
   type        = string
   default     = "31.146.15.0/24"
 }
+
+variable "db_user" {
+  type      = string
+  sensitive = true
+  default   = "postgres_admin"
+}
+
+variable "db_password" {
+  type      = string
+  sensitive = true
+}
+
+variable "db_name" {
+  type    = string
+  default = "postgres"
+}

@@ -36,6 +36,13 @@ output "ssh-webserver_connection_command" {
 }
 
 
+output "ssh-webserver_connection_command_keys_forwarded" {
+  description = "SSH command to webserver with forwarding keys"
+  value       = "ssh -p 2000 -i keys/aws_key -J ubuntu@${aws_lb.nlb.dns_name} spiderman@${aws_instance.web-server.private_ip}"
+}
+
+
+
 # ---------------- S3 + CloudFront ----------------
 
 output "s3_bucket_name" {

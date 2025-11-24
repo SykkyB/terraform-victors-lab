@@ -11,6 +11,20 @@ $db_port = "5432";
 $conn_string = "host=$db_host port=$db_port dbname=$db_name user=$db_user password=$db_pass";
 $db_conn = pg_connect($conn_string);
 
+// ---------------------------
+// Helper functions
+// ---------------------------
+function format_rate($value) {
+    return rtrim(rtrim(number_format((float)$value, 8, '.', ''), '0'), '.');
+}
+
+function format_time($time_str) {
+    return substr($time_str, 0, 8);
+}
+
+// ---------------------------
+// Fetch Latest Crypto Rates
+// ---------------------------
 if (!$db_conn) {
     $db_status = "❌ Failed to connect to Postgres DB: " . pg_last_error();
     $latest_text = "";
@@ -18,9 +32,7 @@ if (!$db_conn) {
 } else {
     $db_status = "✅ Postgres DB connected successfully.";
 
-    // ---------------------------
-    // Fetch Latest Crypto Rates
-    // ---------------------------
+    // Latest rate
     $query_latest = "
         SELECT *
         FROM public.crypto_rates
@@ -38,7 +50,7 @@ if (!$db_conn) {
         $latest_text = "
             <div class='db-box'>
                 <h2>Latest Crypto Rates</h2>
-                <table>
+                <table border='1' cellpadding='8' cellspacing='0'>
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -51,10 +63,10 @@ if (!$db_conn) {
                     <tbody>
                         <tr>
                             <td>{$row['rate_date']}</td>
-                            <td>{$row['rate_time']}</td>
-                            <td>{$row['btc_usd']}</td>
-                            <td>{$row['eth_usd']}</td>
-                            <td>{$row['sol_usd']}</td>
+                            <td>" . format_time($row['rate_time']) . "</td>
+                            <td>" . format_rate($row['btc_usd']) . "</td>
+                            <td>" . format_rate($row['eth_usd']) . "</td>
+                            <td>" . format_rate($row['sol_usd']) . "</td>
                         </tr>
                     </tbody>
                 </table>
@@ -62,9 +74,7 @@ if (!$db_conn) {
         ";
     }
 
-    // ---------------------------
-    // Fetch Previous 10 Records
-    // ---------------------------
+    // Previous 10 records for history
     $query_history = "
         SELECT *
         FROM public.crypto_rates
@@ -74,15 +84,11 @@ if (!$db_conn) {
     ";
     $result_history = pg_query($db_conn, $query_history);
 
-    if (!$result_history) {
-        $history_text = "Query failed: " . pg_last_error();
-    } elseif (pg_num_rows($result_history) == 0) {
-        $history_text = "No historical crypto rates found.";
-    } else {
+    if ($result_history && pg_num_rows($result_history) > 0) {
         $history_text = "
             <div class='db-box'>
                 <h2>Exchange Rate History (Previous 10 Records)</h2>
-                <table>
+                <table border='1' cellpadding='8' cellspacing='0'>
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -98,10 +104,10 @@ if (!$db_conn) {
             $history_text .= "
                 <tr>
                     <td>{$row_hist['rate_date']}</td>
-                    <td>{$row_hist['rate_time']}</td>
-                    <td>{$row_hist['btc_usd']}</td>
-                    <td>{$row_hist['eth_usd']}</td>
-                    <td>{$row_hist['sol_usd']}</td>
+                    <td>" . format_time($row_hist['rate_time']) . "</td>
+                    <td>" . format_rate($row_hist['btc_usd']) . "</td>
+                    <td>" . format_rate($row_hist['eth_usd']) . "</td>
+                    <td>" . format_rate($row_hist['sol_usd']) . "</td>
                 </tr>
             ";
         }
@@ -110,6 +116,8 @@ if (!$db_conn) {
                 </table>
             </div>
         ";
+    } else {
+        $history_text = "<div class='db-box'><p>No historical records found.</p></div>";
     }
 
     pg_close($db_conn);
@@ -121,7 +129,6 @@ if (!$db_conn) {
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <title>Welcome to My AWS Website with RDS</title>
-
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -131,7 +138,6 @@ if (!$db_conn) {
       padding: 40px;
       text-align: center;
     }
-
     .container {
       background: white;
       padding: 30px;
@@ -140,7 +146,6 @@ if (!$db_conn) {
       margin: auto;
       box-shadow: 0 4px 10px rgba(0,0,0,0.1);
     }
-
     .db-box {
       background: #eef7ff;
       padding: 20px;
@@ -149,22 +154,18 @@ if (!$db_conn) {
       font-size: 18px;
       text-align: left;
     }
-
     table {
       width: 100%;
       border-collapse: collapse;
     }
-
     th, td {
       padding: 8px;
       border: 1px solid #ccc;
       text-align: center;
     }
-
     th {
       background: #eef7ff;
     }
-
     img {
       max-width: 100%;
       border-radius: 8px;
@@ -183,7 +184,6 @@ if (!$db_conn) {
     </div>
 
     <?= $latest_text ?>
-
     <?= $history_text ?>
   </div>
 </body>

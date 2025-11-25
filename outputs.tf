@@ -10,17 +10,10 @@ output "ssh_bastion_connection_command" {
   value       = "ssh -p 2000 -i keys/aws_key ubuntu@${aws_lb.nlb.dns_name}"
 }
 
-output "ssh-webserver_connection_command" {
-  description = "SSH command to connect via NLB"
-  value       = "ssh spiderman@${aws_instance.web-server.private_ip}"
+output "ssh_webserver_via_bastion" {
+  description = "SSH into a private webserver instance via NLB Bastion"
+  value       = "ssh -i keys/aws_key -J ubuntu@${aws_lb.nlb.dns_name}:2000 spiderman@<private-ip-from-aws-console>"
 }
-
-
-output "ssh-webserver_connection_command_keys_forwarded" {
-  description = "SSH command to webserver with forwarding keys"
-  value       = "ssh -i keys/aws_key -o \"ProxyJump=ubuntu@${aws_lb.nlb.dns_name}:2000\" spiderman@${aws_instance.web-server.private_ip}"
-}
-
 
 
 # ---------------- S3 + CloudFront ----------------
@@ -55,8 +48,4 @@ output "web_server_public_url_static" {
 
 output "lambda_name" {
   value = aws_lambda_function.crypto_updater.function_name
-}
-
-output "layer_version" {
-  value = aws_lambda_layer_version.crypto_layer.version
 }

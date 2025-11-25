@@ -211,39 +211,6 @@ resource "aws_instance" "bastion" {
 }
 
 
-resource "aws_instance" "web-server" {
-  depends_on = [
-    aws_db_instance.postgres,
-    aws_s3_object.index,
-    aws_s3_object.site1_image,
-    aws_cloudfront_distribution.cdn
-  ]
-
-  ami           = var.instance_ami
-  instance_type = var.instance_type
-  key_name      = aws_key_pair.deployer.key_name
-
-  subnet_id = aws_subnet.private.id
-
-  vpc_security_group_ids = [
-    aws_security_group.sg_ssh.id,
-    aws_security_group.sg_https.id,
-    aws_security_group.sg_http.id
-  ]
-  user_data = templatefile("${path.module}/apache-mkdocs.yaml.tpl", {
-    db_user     = var.db_user
-    db_password = var.db_password
-    db_name     = var.db_name
-    db_host     = aws_db_instance.postgres.address
-  })
-  iam_instance_profile = aws_iam_instance_profile.ec2_profile.name
-
-  tags = {
-    Name = "web-server"
-    os   = "ubuntu-22"
-  }
-}
-
 resource "aws_security_group" "sg_rds" {
   name        = "rds-sg"
   description = "Allow Postgres from web-server"
@@ -389,20 +356,108 @@ resource "aws_lb_target_group" "web_tg" {
   target_type = "instance"
   health_check {
     path                = "/"
-    protocol            = "HTTP"
     interval            = 30
     timeout             = 5
     healthy_threshold   = 2
-    unhealthy_threshold = 2
+    unhealthy_threshold = 5
   }
 }
 
 
-resource "aws_lb_target_group_attachment" "web_attachment" {
-  target_group_arn = aws_lb_target_group.web_tg.arn
-  target_id        = aws_instance.web-server.id
-  port             = 80
+resource "aws_launch_template" "web_lt" {
+  name_prefix   = "web-server-lt-"
+  image_id      = var.instance_ami
+  instance_type = var.instance_type
+  key_name      = aws_key_pair.deployer.key_name
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_profile.name
+  }
+
+  network_interfaces {
+    security_groups = [
+      aws_security_group.sg_ssh.id,
+      aws_security_group.sg_https.id,
+      aws_security_group.sg_http.id
+    ]
+  }
+
+  user_data = base64encode(templatefile("${path.module}/apache-mkdocs.yaml.tpl", {
+    db_user     = var.db_user
+    db_password = var.db_password
+    db_name     = var.db_name
+    db_host     = aws_db_instance.postgres.address
+  }))
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "autoscaled-web-server"
+      os   = "ubuntu-22"
+    }
+  }
 }
+
+
+resource "aws_autoscaling_group" "web_asg" {
+  name                      = "web-server-asg"
+  max_size                  = 2
+  min_size                  = 1
+  desired_capacity          = 1
+  health_check_type         = "EC2"         
+  health_check_grace_period = 300           
+
+
+
+
+  vpc_zone_identifier = [
+    aws_subnet.private.id,
+    aws_subnet.private_2.id
+  ]
+
+  launch_template {
+    id      = aws_launch_template.web_lt.id
+    version = "$Latest"
+  }
+
+  target_group_arns = [
+    aws_lb_target_group.web_tg.arn
+  ]
+
+  tag {
+    key                 = "Name"
+    value               = "web-asg-instance"
+    propagate_at_launch = true
+  }
+}
+
+
+resource "aws_autoscaling_policy" "scale_out" {
+  name                   = "web-scale-out"
+  autoscaling_group_name = aws_autoscaling_group.web_asg.name
+  policy_type            = "SimpleScaling"
+  adjustment_type        = "ChangeInCapacity"
+  scaling_adjustment     = 1
+  cooldown               = 60
+}
+
+resource "aws_cloudwatch_metric_alarm" "cpu_high" {
+  alarm_name          = "web-cpu-high"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 70
+
+  alarm_actions = [aws_autoscaling_policy.scale_out.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.web_asg.name
+  }
+}
+
 
 resource "aws_lb_listener" "alb_listener_http" {
   load_balancer_arn = aws_lb.alb.arn

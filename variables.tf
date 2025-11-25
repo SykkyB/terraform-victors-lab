@@ -49,3 +49,7 @@ variable "db_name" {
   type    = string
   default = "postgres"
 }
+
+variable "lambda_bucket_name" {
+  default = "alexrachok-terraform-web-site-static-content"
+}

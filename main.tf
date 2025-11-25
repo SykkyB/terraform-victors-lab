@@ -253,7 +253,14 @@ resource "aws_security_group" "sg_rds" {
     protocol        = "tcp"
     from_port       = 5432
     to_port         = 5432
-    security_groups = [aws_security_group.sg_ssh.id] # web-server SG
+    security_groups = [aws_security_group.sg_ssh.id]
+  }
+
+  ingress {
+    protocol        = "tcp"
+    from_port       = 5432
+    to_port         = 5432
+    security_groups = [aws_security_group.lambda_sg.id]
   }
 
   egress {

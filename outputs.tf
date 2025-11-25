@@ -47,3 +47,10 @@ output "web_server_public_url" {
   value       = "http://${aws_lb.alb.dns_name}/"
 }
 
+output "lambda_name" {
+  value = aws_lambda_function.crypto_updater.function_name
+}
+
+output "layer_version" {
+  value = aws_lambda_layer_version.crypto_layer.version
+}

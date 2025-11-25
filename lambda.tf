@@ -1,8 +1,16 @@
+############################################################
+# LOCALS
+############################################################
+
 locals {
   layer_key    = "lambda/layers/lambda_layer.zip"
   function_key = "lambda/functions/crypto_updater.zip"
   lambda_name  = "crypto-updater"
 }
+
+############################################################
+# S3 OBJECTS FOR LAMBDA
+############################################################
 
 # Upload Lambda Layer ZIP
 resource "aws_s3_object" "lambda_layer_zip" {
@@ -22,32 +30,37 @@ resource "aws_s3_object" "lambda_function_zip" {
   depends_on = [aws_s3_bucket.static_web_site_bucket]
 }
 
+############################################################
+# IAM ROLE AND POLICIES FOR LAMBDA
+############################################################
+
+# Lambda execution role
 resource "aws_iam_role" "lambda_role" {
   name = "crypto_updater_lambda_role"
 
   assume_role_policy = jsonencode({
     Version = "2012-10-17",
-    Statement = [
-      {
-        Effect    = "Allow",
-        Principal = { Service = "lambda.amazonaws.com" },
-        Action    = "sts:AssumeRole"
-      }
-    ]
+    Statement = [{
+      Effect    = "Allow",
+      Principal = { Service = "lambda.amazonaws.com" },
+      Action    = "sts:AssumeRole"
+    }]
   })
 }
 
-
+# Attach basic execution policy
 resource "aws_iam_role_policy_attachment" "lambda_basic_execution" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+# Attach VPC access policy
 resource "aws_iam_role_policy_attachment" "lambda_vpc_access" {
   role       = aws_iam_role.lambda_role.name
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
 }
 
+# Custom inline policy for S3 and CloudWatch logs
 resource "aws_iam_role_policy" "lambda_policy" {
   name = "${local.lambda_name}-policy"
   role = aws_iam_role.lambda_role.id
@@ -56,18 +69,12 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Action = [
-          "logs:CreateLogGroup",
-          "logs:CreateLogStream",
-          "logs:PutLogEvents"
-        ],
+        Action   = ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
         Effect   = "Allow",
         Resource = "*"
       },
       {
-        Action = [
-          "s3:GetObject"
-        ],
+        Action   = ["s3:GetObject"],
         Effect   = "Allow",
         Resource = "arn:aws:s3:::${var.lambda_bucket_name}/*"
       }
@@ -75,16 +82,22 @@ resource "aws_iam_role_policy" "lambda_policy" {
   })
 }
 
-# Lambda Layer
+############################################################
+# LAMBDA LAYER
+############################################################
+
 resource "aws_lambda_layer_version" "crypto_layer" {
   layer_name          = "crypto-updater-layer"
   s3_bucket           = var.lambda_bucket_name
   s3_key              = local.layer_key
   compatible_runtimes = ["python3.12"]
-  depends_on = [
-    aws_s3_object.lambda_layer_zip
-  ]
+
+  depends_on = [aws_s3_object.lambda_layer_zip]
 }
+
+############################################################
+# LAMBDA FUNCTION
+############################################################
 
 resource "aws_lambda_function" "crypto_updater" {
   function_name = local.lambda_name
@@ -93,13 +106,9 @@ resource "aws_lambda_function" "crypto_updater" {
 
   s3_bucket = var.lambda_bucket_name
   s3_key    = local.function_key
+  role      = aws_iam_role.lambda_role.arn
 
-  role = aws_iam_role.lambda_role.arn
-
-  layers = [
-    aws_lambda_layer_version.crypto_layer.arn
-  ]
-
+  layers = [aws_lambda_layer_version.crypto_layer.arn]
   timeout = 60
 
   environment {
@@ -113,7 +122,7 @@ resource "aws_lambda_function" "crypto_updater" {
 
   vpc_config {
     subnet_ids         = [aws_subnet.private.id, aws_subnet.private_2.id]
-    security_group_ids = [aws_security_group.lambda_sg.id] # Make sure this SG allows outbound to RDS
+    security_group_ids = [aws_security_group.lambda_sg.id]
   }
 
   depends_on = [
@@ -122,18 +131,24 @@ resource "aws_lambda_function" "crypto_updater" {
   ]
 }
 
-# CloudWatch Event Rule (every 1 minute)
+############################################################
+# CLOUDWATCH EVENTS TO TRIGGER LAMBDA
+############################################################
+
+# CloudWatch Event Rule (scheduled every 5 minutes)
 resource "aws_cloudwatch_event_rule" "lambda_schedule" {
   name                = "crypto-updater-schedule"
   schedule_expression = "rate(5 minutes)"
 }
 
+# CloudWatch Event Target
 resource "aws_cloudwatch_event_target" "lambda_target" {
   rule      = aws_cloudwatch_event_rule.lambda_schedule.name
   target_id = "crypto-updater"
   arn       = aws_lambda_function.crypto_updater.arn
 }
 
+# Permission for CloudWatch to invoke Lambda
 resource "aws_lambda_permission" "lambda_schedule_permission" {
   statement_id  = "allow_cloudwatch_invoke"
   action        = "lambda:InvokeFunction"
@@ -142,11 +157,16 @@ resource "aws_lambda_permission" "lambda_schedule_permission" {
   source_arn    = aws_cloudwatch_event_rule.lambda_schedule.arn
 }
 
+############################################################
+# SECURITY GROUP FOR LAMBDA
+############################################################
+
 resource "aws_security_group" "lambda_sg" {
   name        = "lambda_sg"
   description = "Allow Lambda to access RDS"
   vpc_id      = aws_vpc.victors_lab_vpc.id
 
+  # Lambda needs full outbound access to RDS and S3
   egress {
     from_port   = 0
     to_port     = 0

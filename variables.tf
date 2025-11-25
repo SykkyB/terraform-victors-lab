@@ -1,3 +1,8 @@
+############################################################
+# VARIABLES
+############################################################
+
+# ---------------- EC2 / Bastion ----------------
 variable "instance_ami" {
   description = "AMI for EC2 instance"
   type        = string
@@ -16,12 +21,6 @@ variable "ssh_key_name" {
   default     = "aws_key"
 }
 
-variable "region" {
-  description = "aws region"
-  type        = string
-  default     = "us-east-2"
-}
-
 variable "ssh_public_key" {
   description = "SSH public key"
   type        = string
@@ -34,22 +33,35 @@ variable "allowed_cidr" {
   default     = "31.146.15.0/24"
 }
 
+variable "region" {
+  description = "AWS region"
+  type        = string
+  default     = "us-east-2"
+}
+
+# ---------------- Database ----------------
 variable "db_user" {
-  type      = string
-  sensitive = true
-  default   = "postgres_admin"
+  description = "Postgres DB username"
+  type        = string
+  sensitive   = true
+  default     = "postgres_admin"
 }
 
 variable "db_password" {
-  type      = string
-  sensitive = true
+  description = "Postgres DB password"
+  type        = string
+  sensitive   = true
 }
 
 variable "db_name" {
-  type    = string
-  default = "postgres"
+  description = "Postgres DB name"
+  type        = string
+  default     = "postgres"
 }
 
+# ---------------- Lambda ----------------
 variable "lambda_bucket_name" {
-  default = "alexrachok-terraform-web-site-static-content"
+  description = "S3 bucket for Lambda layers and functions"
+  type        = string
+  default     = "alexrachok-terraform-web-site-static-content"
 }

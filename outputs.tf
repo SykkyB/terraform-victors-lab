@@ -1,5 +1,8 @@
-# ---------------- NLB ----------------
+############################################################
+# OUTPUTS
+############################################################
 
+# ---------------- Network Load Balancer (NLB) ----------------
 output "nlb_dns_name" {
   description = "DNS name of the Network Load Balancer"
   value       = aws_lb.nlb.dns_name
@@ -15,9 +18,7 @@ output "ssh_webserver_via_bastion" {
   value       = "ssh -i keys/aws_key -J ubuntu@${aws_lb.nlb.dns_name}:2000 spiderman@<private-ip-from-aws-console>"
 }
 
-
 # ---------------- S3 + CloudFront ----------------
-
 output "s3_bucket_name" {
   description = "The name of the S3 bucket hosting static website content"
   value       = aws_s3_bucket.static_web_site_bucket.bucket
@@ -29,7 +30,6 @@ output "cloudfront_url" {
 }
 
 # ---------------- Application Connection Info ----------------
-
 output "alb_dns_name" {
   description = "DNS name of the public ALB"
   value       = aws_lb.alb.dns_name
@@ -41,11 +41,12 @@ output "web_server_public_url" {
 }
 
 output "web_server_public_url_static" {
-  description = "Public URL to access your private web server via ALB"
+  description = "Public URL to access static content on ALB"
   value       = "http://${aws_lb.alb.dns_name}/"
 }
 
-
+# ---------------- Lambda ----------------
 output "lambda_name" {
-  value = aws_lambda_function.crypto_updater.function_name
+  description = "Name of the crypto updater Lambda function"
+  value       = aws_lambda_function.crypto_updater.function_name
 }

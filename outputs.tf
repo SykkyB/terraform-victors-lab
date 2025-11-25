@@ -44,8 +44,14 @@ output "alb_dns_name" {
 
 output "web_server_public_url" {
   description = "Public URL to access your private web server via ALB"
+  value       = "http://${aws_lb.alb.dns_name}/index.php"
+}
+
+output "web_server_public_url_static" {
+  description = "Public URL to access your private web server via ALB"
   value       = "http://${aws_lb.alb.dns_name}/"
 }
+
 
 output "lambda_name" {
   value = aws_lambda_function.crypto_updater.function_name

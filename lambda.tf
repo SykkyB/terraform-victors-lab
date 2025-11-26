@@ -69,7 +69,7 @@ resource "aws_iam_role_policy" "lambda_policy" {
     Version = "2012-10-17",
     Statement = [
       {
-        Action   = ["logs:CreateLogGroup","logs:CreateLogStream","logs:PutLogEvents"],
+        Action   = ["logs:CreateLogGroup", "logs:CreateLogStream", "logs:PutLogEvents"],
         Effect   = "Allow",
         Resource = "*"
       },
@@ -108,7 +108,7 @@ resource "aws_lambda_function" "crypto_updater" {
   s3_key    = local.function_key
   role      = aws_iam_role.lambda_role.arn
 
-  layers = [aws_lambda_layer_version.crypto_layer.arn]
+  layers  = [aws_lambda_layer_version.crypto_layer.arn]
   timeout = 60
 
   environment {

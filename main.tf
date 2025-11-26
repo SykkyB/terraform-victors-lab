@@ -188,11 +188,11 @@ resource "aws_security_group" "sg_http" {
     to_port     = 80
   }
 
-  egress { 
+  egress {
     cidr_blocks = ["0.0.0.0/0"]
-    protocol = "-1"
-    from_port = 0
-    to_port = 0 
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
   }
 }
 
@@ -207,11 +207,11 @@ resource "aws_security_group" "sg_https" {
     to_port     = 443
   }
 
-  egress { 
+  egress {
     cidr_blocks = ["0.0.0.0/0"]
-    protocol = "-1"
-    from_port = 0
-    to_port = 0 
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
   }
 }
 
@@ -237,11 +237,11 @@ resource "aws_security_group" "sg_alb" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-  egress { 
+  egress {
     cidr_blocks = ["0.0.0.0/0"]
-    protocol = "-1"
-    from_port = 0
-    to_port = 0 
+    protocol    = "-1"
+    from_port   = 0
+    to_port     = 0
   }
 
   tags = { Name = "alb-sg" }
@@ -321,10 +321,10 @@ resource "aws_security_group" "sg_nlb" {
 
 # Bastion Host
 resource "aws_instance" "bastion" {
-  ami           = var.instance_ami
-  instance_type = var.instance_type
-  key_name      = aws_key_pair.deployer.key_name
-  subnet_id     = aws_subnet.public.id
+  ami                    = var.instance_ami
+  instance_type          = var.instance_type
+  key_name               = aws_key_pair.deployer.key_name
+  subnet_id              = aws_subnet.public.id
   vpc_security_group_ids = [aws_security_group.sg_bastion.id]
 
   tags = { Name = "bastion-host", os = "ubuntu-22" }
@@ -441,7 +441,7 @@ resource "aws_launch_template" "web_lt" {
 
   tag_specifications {
     resource_type = "instance"
-    tags = { Name = "autoscaled-web-server", os = "ubuntu-22" }
+    tags          = { Name = "autoscaled-web-server", os = "ubuntu-22" }
   }
 }
 
@@ -503,7 +503,7 @@ resource "aws_cloudwatch_metric_alarm" "cpu_high" {
 resource "aws_iam_role" "ec2_role" {
   name = "ec2_s3_access_role"
   assume_role_policy = jsonencode({
-    Version = "2012-10-17"
+    Version   = "2012-10-17"
     Statement = [{ Action = "sts:AssumeRole", Effect = "Allow", Principal = { Service = "ec2.amazonaws.com" } }]
   })
 }
@@ -543,7 +543,7 @@ resource "aws_s3_bucket_ownership_controls" "s3_ownership_controls" {
 }
 
 resource "aws_s3_bucket_public_access_block" "s3_block_public_access" {
-  bucket = aws_s3_bucket.static_web_site_bucket.id
+  bucket                  = aws_s3_bucket.static_web_site_bucket.id
   block_public_acls       = true
   block_public_policy     = true
   ignore_public_acls      = true
@@ -589,23 +589,23 @@ resource "aws_s3_object" "index" {
 }
 
 resource "aws_s3_object" "php_index" {
-  bucket       = aws_s3_bucket.static_web_site_bucket.bucket
-  key          = "web_site2/index.php"
-  content      = templatefile("${path.module}/www_site2/index.php.tpl", { 
-                   cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/",
-                   db_host        = aws_db_instance.postgres.address,
-                   db_name        = var.db_name,
-                   db_user        = var.db_user,
-                   db_pass        = var.db_password
-                 })
+  bucket = aws_s3_bucket.static_web_site_bucket.bucket
+  key    = "web_site2/index.php"
+  content = templatefile("${path.module}/www_site2/index.php.tpl", {
+    cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/",
+    db_host        = aws_db_instance.postgres.address,
+    db_name        = var.db_name,
+    db_user        = var.db_user,
+    db_pass        = var.db_password
+  })
   content_type = "application/x-httpd-php"
-  etag         = md5(templatefile("${path.module}/www_site2/index.php.tpl", { 
-                   cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/",
-                   db_host        = aws_db_instance.postgres.address,
-                   db_name        = var.db_name,
-                   db_user        = var.db_user,
-                   db_pass        = var.db_password
-                 }))
+  etag = md5(templatefile("${path.module}/www_site2/index.php.tpl", {
+    cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/",
+    db_host        = aws_db_instance.postgres.address,
+    db_name        = var.db_name,
+    db_user        = var.db_user,
+    db_pass        = var.db_password
+  }))
 }
 
 # CloudFront
@@ -618,20 +618,20 @@ resource "aws_cloudfront_origin_access_control" "oac" {
 }
 
 resource "aws_cloudfront_distribution" "cdn" {
-  enabled              = true
-  comment              = "Static web site CDN"
-  default_root_object  = "index.html"
+  enabled             = true
+  comment             = "Static web site CDN"
+  default_root_object = "index.html"
 
   origin {
-    domain_name               = aws_s3_bucket.static_web_site_bucket.bucket_regional_domain_name
-    origin_id                 = "s3-origin"
-    origin_access_control_id  = aws_cloudfront_origin_access_control.oac.id
+    domain_name              = aws_s3_bucket.static_web_site_bucket.bucket_regional_domain_name
+    origin_id                = "s3-origin"
+    origin_access_control_id = aws_cloudfront_origin_access_control.oac.id
   }
 
   default_cache_behavior {
-    allowed_methods      = ["GET", "HEAD"]
-    cached_methods       = ["GET", "HEAD"]
-    target_origin_id     = "s3-origin"
+    allowed_methods        = ["GET", "HEAD"]
+    cached_methods         = ["GET", "HEAD"]
+    target_origin_id       = "s3-origin"
     viewer_protocol_policy = "redirect-to-https"
 
     forwarded_values {
@@ -697,7 +697,7 @@ resource "aws_db_instance" "postgres" {
 
 # S3 VPC Endpoint
 resource "aws_vpc_endpoint" "s3" {
-  vpc_id       = aws_vpc.victors_lab_vpc.id
-  service_name = "com.amazonaws.${var.region}.s3"
+  vpc_id          = aws_vpc.victors_lab_vpc.id
+  service_name    = "com.amazonaws.${var.region}.s3"
   route_table_ids = [aws_route_table.private_rt.id]
 }

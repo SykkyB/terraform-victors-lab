@@ -44,9 +44,3 @@ output "web_server_public_url_static" {
   description = "Public URL to access static content on ALB"
   value       = "http://${aws_lb.alb.dns_name}/"
 }
-
-# ---------------- Lambda ----------------
-output "lambda_name" {
-  description = "Name of the crypto updater Lambda function"
-  value       = aws_lambda_function.crypto_updater.function_name
-}

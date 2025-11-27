@@ -59,9 +59,8 @@ variable "db_name" {
   default     = "postgres"
 }
 
-# ---------------- Lambda ----------------
-variable "lambda_bucket_name" {
-  description = "S3 bucket for Lambda layers and functions"
+variable "exchange_updater_container_image" {
+  description = "ECR image URI for exchange updater"
   type        = string
-  default     = "alexrachok-terraform-web-site-static-content"
+  default     = "815408489721.dkr.ecr.us-east-2.amazonaws.com/exchange-updater:latest"
 }

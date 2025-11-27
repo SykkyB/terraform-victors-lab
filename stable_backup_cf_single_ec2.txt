@@ -29,5 +29,24 @@ ssh -i keys/aws_key -o "ProxyJump=ubuntu@ssh-forward-nlb-63864b2dbd05ad60.elb.us
 
 PGPASSWORD="DU9AZNAFx7IxxsfRb2P4" psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres
 
-SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.0.26%" AND ProductType="2"
-SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.0.2%" AND ProductType="2"
+
+815408489721.dkr.ecr.us-east-2.amazonaws.com/exchange-updater
+
+aws ecr create-repository --repository-name exchange-updater
+
+{
+    "repository": {
+        "repositoryArn": "arn:aws:ecr:us-east-2:815408489721:repository/exchange-updater",
+        "registryId": "815408489721",
+        "repositoryName": "exchange-updater",
+        "repositoryUri": "815408489721.dkr.ecr.us-east-2.amazonaws.com/exchange-updater",
+        "createdAt": "2025-11-27T20:27:12.172000+04:00",
+        "imageTagMutability": "MUTABLE",
+        "imageScanningConfiguration": {
+            "scanOnPush": false
+        },
+        "encryptionConfiguration": {
+            "encryptionType": "AES256"
+        }
+    }
+}

@@ -35,6 +35,14 @@ resource "aws_subnet" "public_2" {
   tags                    = { Name = "public-subnet-2" }
 }
 
+resource "aws_subnet" "public_3" {
+  vpc_id                  = aws_vpc.victors_lab_vpc.id
+  cidr_block              = "10.0.4.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[2]
+  map_public_ip_on_launch = true
+  tags                    = { Name = "public-subnet-3" }
+}
+
 # Private subnets
 resource "aws_subnet" "private" {
   vpc_id            = aws_vpc.victors_lab_vpc.id
@@ -279,13 +287,6 @@ resource "aws_security_group" "sg_rds" {
     security_groups = [aws_security_group.sg_ssh.id]
   }
 
-  ingress {
-    protocol        = "tcp"
-    from_port       = 5432
-    to_port         = 5432
-    security_groups = [aws_security_group.lambda_sg.id]
-  }
-
   egress {
     protocol    = "-1"
     from_port   = 0
@@ -338,7 +339,7 @@ resource "aws_instance" "bastion" {
 resource "aws_lb" "alb" {
   name               = "web-server-alb"
   load_balancer_type = "application"
-  subnets            = [aws_subnet.public.id, aws_subnet.public_2.id]
+  subnets            = [aws_subnet.public.id, aws_subnet.public_2.id, aws_subnet.public_3.id]
   security_groups    = [aws_security_group.sg_alb.id]
 
   enable_deletion_protection = false

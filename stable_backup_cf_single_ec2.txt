@@ -14,6 +14,11 @@ pg_dump -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres
         -f my_backup.dump
 
 
+% age-keygen -o ./keys/key.txt
+Public key: age1xxd8p6ztt69shhwd2akqfjamkcnv06x5yvx6l3wdn7ps3t7rzeyqlwevnk
+
+
+
 PGPASSWORD=DU9AZNAFx7IxxsfRb2P4 psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -c "CREATE DATABASE cryptodb;"
 
 
@@ -24,4 +29,5 @@ ssh -i keys/aws_key -o "ProxyJump=ubuntu@ssh-forward-nlb-63864b2dbd05ad60.elb.us
 
 PGPASSWORD="DU9AZNAFx7IxxsfRb2P4" psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres
 
-
+SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.0.26%" AND ProductType="2"
+SELECT * FROM Win32_OperatingSystem WHERE Version LIKE "10.0.2%" AND ProductType="2"

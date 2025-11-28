@@ -39,25 +39,6 @@ variable "region" {
   default     = "us-east-2"
 }
 
-# ---------------- Database ----------------
-variable "db_user" {
-  description = "Postgres DB username"
-  type        = string
-  sensitive   = true
-  default     = "postgres_admin"
-}
-
-variable "db_password" {
-  description = "Postgres DB password"
-  type        = string
-  sensitive   = true
-}
-
-variable "db_name" {
-  description = "Postgres DB name"
-  type        = string
-  default     = "postgres"
-}
 
 variable "exchange_updater_container_image" {
   description = "ECR image URI for exchange updater"

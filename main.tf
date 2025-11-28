@@ -5,6 +5,21 @@
 # Get availability zones for the region
 data "aws_availability_zones" "available" {}
 
+
+data "sops_file" "secrets" {
+  source_file = "${path.module}/terraform.tfvars.enc"
+  input_type  = "yaml"
+}
+
+locals {
+  secrets = data.sops_file.secrets.data
+
+  # shortcut aliases
+  db_user     = local.secrets.db_user
+  db_password = local.secrets.db_password
+  db_name     = local.secrets.db_name
+}
+############
 ############################################################
 # VPC AND SUBNETS
 ############################################################
@@ -434,9 +449,9 @@ resource "aws_launch_template" "web_lt" {
   }
 
   user_data = base64encode(templatefile("${path.module}/apache-mkdocs.yaml.tpl", {
-    db_user     = var.db_user
-    db_password = var.db_password
-    db_name     = var.db_name
+    db_user     = local.db_user
+    db_password = local.db_password
+    db_name     = local.db_name
     db_host     = aws_db_instance.postgres.address
   }))
 
@@ -595,17 +610,17 @@ resource "aws_s3_object" "php_index" {
   content = templatefile("${path.module}/www_site2/index.php.tpl", {
     cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/",
     db_host        = aws_db_instance.postgres.address,
-    db_name        = var.db_name,
-    db_user        = var.db_user,
-    db_pass        = var.db_password
+    db_name        = local.db_name,
+    db_user        = local.db_user,
+    db_pass        = local.db_password
   })
   content_type = "application/x-httpd-php"
   etag = md5(templatefile("${path.module}/www_site2/index.php.tpl", {
     cloudfront_url = "https://${aws_cloudfront_distribution.cdn.domain_name}/",
     db_host        = aws_db_instance.postgres.address,
-    db_name        = var.db_name,
-    db_user        = var.db_user,
-    db_pass        = var.db_password
+    db_name        = local.db_name,
+    db_user        = local.db_user,
+    db_pass        = local.db_password
   }))
 }
 
@@ -683,9 +698,9 @@ resource "aws_db_instance" "postgres" {
   engine                 = "postgres"
   instance_class         = "db.t4g.micro"
   allocated_storage      = 20
-  username               = var.db_user
-  password               = var.db_password
-  db_name                = var.db_name
+  username               = local.db_user
+  password               = local.db_password
+  db_name                = local.db_name
   publicly_accessible    = false
   vpc_security_group_ids = [aws_security_group.sg_rds.id]
   db_subnet_group_name   = aws_db_subnet_group.db_subnets.name

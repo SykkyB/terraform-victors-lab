@@ -77,9 +77,9 @@ resource "aws_ecs_task_definition" "exchange_task" {
 
       environment = [
         { name = "DB_HOST", value = aws_db_instance.postgres.address },
-        { name = "DB_NAME", value = var.db_name },
-        { name = "DB_USER", value = var.db_user },
-        { name = "DB_PASS", value = var.db_password }
+        { name = "DB_NAME", value = local.db_name },
+        { name = "DB_USER", value = local.db_user },
+        { name = "DB_PASS", value = local.db_password }
       ]
 
       logConfiguration = {

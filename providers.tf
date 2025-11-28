@@ -4,7 +4,7 @@ terraform {
       source = "hashicorp/aws"
       #version = "~>4.20"
     }
-      sops = {
+    sops = {
       source  = "carlpett/sops"
       version = "1.0.0"
     }

@@ -4,6 +4,10 @@ terraform {
       source = "hashicorp/aws"
       #version = "~>4.20"
     }
+    sops = {
+      source  = "carlpett/sops"
+      version = "1.0.0"
+    }
   }
   #required_version = ">= 1.2.8"
 
@@ -15,6 +19,8 @@ terraform {
   }
 
 }
+
+provider "sops" {}
 
 provider "aws" {
   region = "us-east-2"

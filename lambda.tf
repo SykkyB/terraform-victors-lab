@@ -114,9 +114,9 @@ resource "aws_lambda_function" "crypto_updater" {
   environment {
     variables = {
       DB_HOST = aws_db_instance.postgres.address
-      DB_NAME = var.db_name
-      DB_USER = var.db_user
-      DB_PASS = var.db_password
+      DB_NAME = local.db_name
+      DB_USER = local.db_user
+      DB_PASS = local.db_password
     }
   }
 

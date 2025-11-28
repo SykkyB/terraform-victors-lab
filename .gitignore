@@ -1,7 +1,7 @@
 ### Ignore Terraform state files
 *.tfstate
 *.tfstate.*
-*.tfvars
+#*.tfvars
 *.tfvars.json
 
 # Crash logs

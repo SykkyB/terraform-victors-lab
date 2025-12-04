@@ -34,6 +34,11 @@ runcmd:
   - aws s3 cp s3://alexrachok-terraform-web-site-static-content/web_site2/index.php /var/www/html/index.php
   - systemctl restart apache2
 
+  # --- Healthcheck page ---
+  - aws s3 cp s3://alexrachok-terraform-web-site-static-content/web_site2/healthcheck_init.sh /tmp/healthcheck_init.sh
+  - chmod +x /tmp/healthcheck_init.sh
+  - /tmp/healthcheck_init.sh
+
   # --- PostgreSQL repository install ---
   - sh -c 'echo "deb http://apt.postgresql.org/pub/repos/apt/ $(lsb_release -cs)-pgdg main" > /etc/apt/sources.list.d/pgdg.list'
   - wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -

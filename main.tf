@@ -73,6 +73,15 @@ resource "aws_subnet" "private_2" {
   tags                    = { Name = "private-subnet-2" }
 }
 
+resource "aws_subnet" "private_3" {
+  vpc_id                  = aws_vpc.victors_lab_vpc.id
+  cidr_block              = "10.0.5.0/24"
+  availability_zone       = data.aws_availability_zones.available.names[0]
+  map_public_ip_on_launch = false
+
+  tags = { Name = "private-subnet-3" }
+}
+
 # Internet Gateway
 resource "aws_internet_gateway" "igw" {
   vpc_id = aws_vpc.victors_lab_vpc.id
@@ -114,6 +123,11 @@ resource "aws_route_table_association" "public_2_assoc" {
   route_table_id = aws_route_table.public_rt.id
 }
 
+resource "aws_route_table_association" "public_3_assoc" {
+  subnet_id      = aws_subnet.public_3.id
+  route_table_id = aws_route_table.public_rt.id
+}
+
 # Private route table
 resource "aws_route_table" "private_rt" {
   vpc_id = aws_vpc.victors_lab_vpc.id
@@ -131,6 +145,11 @@ resource "aws_route_table_association" "private_assoc" {
 
 resource "aws_route_table_association" "private_2_assoc" {
   subnet_id      = aws_subnet.private_2.id
+  route_table_id = aws_route_table.private_rt.id
+}
+
+resource "aws_route_table_association" "private_3_assoc" {
+  subnet_id      = aws_subnet.private_3.id
   route_table_id = aws_route_table.private_rt.id
 }
 
@@ -475,7 +494,7 @@ resource "aws_autoscaling_group" "web_asg" {
   desired_capacity          = 1
   health_check_type         = "EC2"
   health_check_grace_period = 300
-  vpc_zone_identifier       = [aws_subnet.private.id, aws_subnet.private_2.id]
+  vpc_zone_identifier       = [aws_subnet.private.id, aws_subnet.private_2.id, aws_subnet.private_3.id]
 
   launch_template {
     id      = aws_launch_template.web_lt.id
@@ -587,6 +606,13 @@ resource "aws_s3_object" "site2_image" {
   etag   = filemd5("www_site2/crypto.jpg")
 }
 
+resource "aws_s3_object" "healthcheck_script" {
+  bucket = aws_s3_bucket.static_web_site_bucket.bucket
+  key    = "web_site2/healthcheck_init.sh"
+  source = "www_site2/healthcheck_init.sh"
+  etag   = filemd5("www_site2/healthcheck_init.sh")
+}
+
 resource "aws_s3_object" "db_backup" {
   bucket = aws_s3_bucket.static_web_site_bucket.bucket
   key    = "web_site2/db_backup.dump"
@@ -694,7 +720,7 @@ resource "aws_s3_bucket_policy" "bucket_policy" {
 # DB Subnet Group
 resource "aws_db_subnet_group" "db_subnets" {
   name       = "postgress-db-subnet-group"
-  subnet_ids = [aws_subnet.private.id, aws_subnet.private_2.id]
+  subnet_ids = [aws_subnet.private.id, aws_subnet.private_2.id, aws_subnet.private_3.id]
   tags       = { Name = "db-subnet-group" }
 }
 

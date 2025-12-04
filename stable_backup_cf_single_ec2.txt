@@ -17,7 +17,7 @@ pg_dump -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres
 % age-keygen -o ./keys/key.txt
 Public key: age1xxd8p6ztt69shhwd2akqfjamkcnv06x5yvx6l3wdn7ps3t7rzeyqlwevnk
 
-
+10 pm 6th
 
 PGPASSWORD=DU9AZNAFx7IxxsfRb2P4 psql -h test-postgres-db.cns6wc2k8rgh.us-east-2.rds.amazonaws.com -U postgres_admin -d postgres -c "CREATE DATABASE cryptodb;"
 

@@ -40,6 +40,12 @@ output "web_server_public_url" {
   value       = "http://${aws_lb.alb.dns_name}/index.php"
 }
 
+output "web_server_healthpage_url" {
+  description = "Public URL to access your private web server via ALB"
+  value       = "http://${aws_lb.alb.dns_name}/healthcheck.html"
+}
+
+
 output "web_server_public_url_static" {
   description = "Public URL to access static content on ALB"
   value       = "http://${aws_lb.alb.dns_name}/"

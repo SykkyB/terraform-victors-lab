@@ -11,6 +11,7 @@ $db_port = "5432";
 $conn_string = "host=$db_host port=$db_port dbname=$db_name user=$db_user password=$db_pass";
 $db_conn = pg_connect($conn_string);
 
+date_default_timezone_set('Asia/Tbilisi');
 // ---------------------------
 // Helper functions
 // ---------------------------
@@ -18,8 +19,12 @@ function format_rate($value) {
     return rtrim(rtrim(number_format((float)$value, 8, '.', ''), '0'), '.');
 }
 
-function format_time($time_str) {
-    return substr($time_str, 0, 8);
+function format_time($date_str, $time_str) {
+    // Combine DATE + TIME from DB
+    $dt = new DateTime("$date_str $time_str", new DateTimeZone("UTC"));
+    // Convert to your timezone
+    $dt->setTimezone(new DateTimeZone("Asia/Tbilisi"));
+    return $dt->format("H:i:s");
 }
 
 // ---------------------------
@@ -63,7 +68,11 @@ if (!$db_conn) {
                     <tbody>
                         <tr>
                             <td>{$row['rate_date']}</td>
-                            <td>" . format_time($row['rate_time']) . "</td>
+                            <td class='utc-time'
+                              data-date=\"{$row['rate_date']}\"
+                              data-time=\"{$row['rate_time']}\">
+                              {$row['rate_time']}
+                           </td>
                             <td>" . format_rate($row['btc_usd']) . "</td>
                             <td>" . format_rate($row['eth_usd']) . "</td>
                             <td>" . format_rate($row['sol_usd']) . "</td>
@@ -104,7 +113,11 @@ if (!$db_conn) {
             $history_text .= "
                 <tr>
                     <td>{$row_hist['rate_date']}</td>
-                    <td>" . format_time($row_hist['rate_time']) . "</td>
+                    <td class='utc-time'
+                      data-date=\"{$row_hist['rate_date']}\"
+                      data-time=\"{$row_hist['rate_time']}\">
+                      {$row_hist['rate_time']}
+                   </td>
                     <td>" . format_rate($row_hist['btc_usd']) . "</td>
                     <td>" . format_rate($row_hist['eth_usd']) . "</td>
                     <td>" . format_rate($row_hist['sol_usd']) . "</td>
@@ -186,5 +199,27 @@ if (!$db_conn) {
     <?= $latest_text ?>
     <?= $history_text ?>
   </div>
+
+  <script>
+    document.addEventListener("DOMContentLoaded", function () {
+        const cells = document.querySelectorAll(".utc-time");
+
+        cells.forEach(cell => {
+            const date = cell.getAttribute("data-date");
+            const time = cell.getAttribute("data-time").substring(0, 8);
+
+            const utcString = date + "T" + time + "Z"; 
+            const localDate = new Date(utcString);
+
+            const localTime = localDate.toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+                second: "2-digit"
+            });
+
+            cell.textContent = localTime;
+        });
+    });
+  </script>
 </body>
 </html>

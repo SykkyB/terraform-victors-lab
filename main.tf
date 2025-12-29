@@ -405,17 +405,6 @@ resource "aws_lb_target_group" "web_tg" {
   }
 }
 
-# ALB Listener
-resource "aws_lb_listener" "alb_listener_http" {
-  load_balancer_arn = aws_lb.alb.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.web_tg.arn
-  }
-}
 
 # NLB for SSH forwarding
 resource "aws_lb" "nlb" {
@@ -666,9 +655,13 @@ resource "aws_cloudfront_origin_access_control" "oac" {
 }
 
 resource "aws_cloudfront_distribution" "cdn" {
+  depends_on = [
+    aws_acm_certificate_validation.cloudfront_cert
+  ]
   enabled             = true
-  comment             = "Static web site CDN"
   default_root_object = "index.html"
+
+  aliases = ["internet.sys-lab.xyz"]
 
   origin {
     domain_name              = aws_s3_bucket.static_web_site_bucket.bucket_regional_domain_name
@@ -677,24 +670,35 @@ resource "aws_cloudfront_distribution" "cdn" {
   }
 
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "s3-origin"
     viewer_protocol_policy = "redirect-to-https"
 
-    forwarded_values {
-      query_string = false
-      cookies { forward = "none" }
+    allowed_methods = ["GET", "HEAD"]
+    cached_methods  = ["GET", "HEAD"]
+
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.s3_origin.id
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
     }
   }
 
-  price_class = "PriceClass_100"
-
-  restrictions {
-    geo_restriction { restriction_type = "none" }
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.cloudfront_cert.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
+}
 
-  viewer_certificate { cloudfront_default_certificate = true }
+data "aws_cloudfront_cache_policy" "caching_optimized" {
+  name = "Managed-CachingOptimized"
+}
+
+data "aws_cloudfront_origin_request_policy" "s3_origin" {
+  name = "Managed-CORS-S3Origin"
 }
 
 # S3 Bucket Policy for CloudFront access
@@ -748,4 +752,129 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_id          = aws_vpc.victors_lab_vpc.id
   service_name    = "com.amazonaws.${var.region}.s3"
   route_table_ids = [aws_route_table.private_rt.id]
+}
+
+data "aws_route53_zone" "main" {
+  name         = "sys-lab.xyz"
+  private_zone = false
+}
+
+resource "aws_acm_certificate" "cloudfront_cert" {
+  provider          = aws.us_east_1
+  domain_name       = "sys-lab.xyz"
+  validation_method = "DNS"
+
+  subject_alternative_names = [
+    "internet.sys-lab.xyz",
+    "www.internet.sys-lab.xyz"
+  ]
+}
+
+resource "aws_route53_record" "alb_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.alb_cert.domain_validation_options :
+    dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.value]
+}
+
+resource "aws_acm_certificate_validation" "alb_cert_validation" {
+  certificate_arn = aws_acm_certificate.alb_cert.arn
+  validation_record_fqdns = [
+    for r in aws_route53_record.alb_cert_validation : r.fqdn
+  ]
+}
+
+
+
+resource "aws_route53_record" "cloudfront_dns" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "internet.sys-lab.xyz"
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.cdn.domain_name
+    zone_id                = aws_cloudfront_distribution.cdn.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+resource "aws_route53_record" "alb_dns" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "crypto.sys-lab.xyz"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.alb.dns_name
+    zone_id                = aws_lb.alb.zone_id
+    evaluate_target_health = true
+  }
+}
+
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+
+  certificate_arn = aws_acm_certificate.alb_cert.arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_tg.arn
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+    redirect {
+      protocol    = "HTTPS"
+      port        = "443"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+resource "aws_acm_certificate" "alb_cert" {
+  domain_name       = "crypto.sys-lab.xyz"
+  validation_method = "DNS"
+}
+
+resource "aws_route53_record" "cloudfront_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.cloudfront_cert.domain_validation_options :
+    dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.value]
+}
+
+resource "aws_acm_certificate_validation" "cloudfront_cert" {
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.cloudfront_cert.arn
+  validation_record_fqdns = [
+    for r in aws_route53_record.cloudfront_cert_validation : r.fqdn
+  ]
 }

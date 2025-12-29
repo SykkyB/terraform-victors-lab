@@ -30,7 +30,7 @@ packages:
 runcmd:
   # --- Apache setup ---
   - rm /var/www/html/index.html || true
-  - aws s3 cp s3://alexrachok-terraform-web-site-static-content/index.html /var/www/html/index.html
+  - aws s3 cp s3://alexrachok-terraform-web-site-static-content/index.html /var/www/html/index1.html
   - aws s3 cp s3://alexrachok-terraform-web-site-static-content/web_site2/index.php /var/www/html/index.php
   - systemctl restart apache2
 

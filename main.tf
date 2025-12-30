@@ -202,14 +202,6 @@ resource "aws_security_group" "sg_ssh" {
     security_groups = [aws_security_group.sg_bastion.id]
   }
 
-  ingress {
-    description     = "Allow ping from bastion"
-    protocol        = "icmp"
-    from_port       = -1
-    to_port         = -1
-    security_groups = [aws_security_group.sg_bastion.id]
-  }
-
   egress {
     cidr_blocks = ["0.0.0.0/0"]
     protocol    = "-1"
@@ -219,41 +211,36 @@ resource "aws_security_group" "sg_ssh" {
 }
 
 # HTTP/HTTPS SG
-resource "aws_security_group" "sg_http" {
-  description = "Allow HTTP from allowed CIDR"
+resource "aws_security_group" "sg_web_ingress" {
+  description = "Allow HTTP/HTTPS from allowed CIDR"
   vpc_id      = aws_vpc.victors_lab_vpc.id
 
   ingress {
-    cidr_blocks = [var.allowed_cidr]
-    protocol    = "tcp"
+    description = "HTTP from allowed CIDR"
     from_port   = 80
     to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_cidr]
   }
-
-  egress {
-    cidr_blocks = ["0.0.0.0/0"]
-    protocol    = "-1"
-    from_port   = 0
-    to_port     = 0
-  }
-}
-
-resource "aws_security_group" "sg_https" {
-  description = "Allow HTTPS from allowed CIDR"
-  vpc_id      = aws_vpc.victors_lab_vpc.id
 
   ingress {
-    cidr_blocks = [var.allowed_cidr]
-    protocol    = "tcp"
+    description = "HTTPS from allowed CIDR"
     from_port   = 443
     to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = [var.allowed_cidr]
   }
 
   egress {
-    cidr_blocks = ["0.0.0.0/0"]
-    protocol    = "-1"
+    description = "All outbound"
     from_port   = 0
     to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  tags = {
+    Name = "web-ingress-sg"
   }
 }
 
@@ -399,18 +386,6 @@ resource "aws_lb_target_group" "web_tg" {
   }
 }
 
-# ALB Listener
-resource "aws_lb_listener" "alb_listener_http" {
-  load_balancer_arn = aws_lb.alb.arn
-  port              = 80
-  protocol          = "HTTP"
-
-  default_action {
-    type             = "forward"
-    target_group_arn = aws_lb_target_group.web_tg.arn
-  }
-}
-
 # NLB for SSH forwarding
 resource "aws_lb" "nlb" {
   name               = "ssh-forward-nlb"
@@ -462,8 +437,7 @@ resource "aws_launch_template" "web_lt" {
   network_interfaces {
     security_groups = [
       aws_security_group.sg_ssh.id,
-      aws_security_group.sg_https.id,
-      aws_security_group.sg_http.id
+      aws_security_group.sg_web_ingress.id
     ]
   }
 
@@ -483,9 +457,9 @@ resource "aws_launch_template" "web_lt" {
 # AutoScaling Group
 resource "aws_autoscaling_group" "web_asg" {
   name                      = "web-server-asg"
-  max_size                  = 2
-  min_size                  = 1
-  desired_capacity          = 1
+  max_size                  = 3
+  min_size                  = 2
+  desired_capacity          = 3
   health_check_type         = "EC2"
   health_check_grace_period = 300
   vpc_zone_identifier       = [aws_subnet.private.id, aws_subnet.private_2.id, aws_subnet.private_3.id]
@@ -599,11 +573,11 @@ resource "aws_s3_object" "site2_image" {
   source = "www_site2/crypto.jpg"
   etag   = filemd5("www_site2/crypto.jpg")
 }
-  
+
 resource "aws_s3_object" "healthcheck_script" {
   bucket = aws_s3_bucket.static_web_site_bucket.bucket
   key    = "web_site2/healthcheck_init.sh"
-  source = "www_site2/healthcheck_init.sh"   # no .tpl!
+  source = "www_site2/healthcheck_init.sh"
   etag   = filemd5("www_site2/healthcheck_init.sh")
 }
 
@@ -660,9 +634,15 @@ resource "aws_cloudfront_origin_access_control" "oac" {
 }
 
 resource "aws_cloudfront_distribution" "cdn" {
+  depends_on = [
+    aws_acm_certificate_validation.cloudfront_cert
+  ]
   enabled             = true
-  comment             = "Static web site CDN"
   default_root_object = "index.html"
+
+  web_acl_id = aws_wafv2_web_acl.cloudfront.arn
+
+  aliases = ["internet.sys-lab.xyz"]
 
   origin {
     domain_name              = aws_s3_bucket.static_web_site_bucket.bucket_regional_domain_name
@@ -671,24 +651,41 @@ resource "aws_cloudfront_distribution" "cdn" {
   }
 
   default_cache_behavior {
-    allowed_methods        = ["GET", "HEAD"]
-    cached_methods         = ["GET", "HEAD"]
     target_origin_id       = "s3-origin"
     viewer_protocol_policy = "redirect-to-https"
 
-    forwarded_values {
-      query_string = false
-      cookies { forward = "none" }
+    allowed_methods = ["GET", "HEAD"]
+    cached_methods  = ["GET", "HEAD"]
+
+    cache_policy_id          = data.aws_cloudfront_cache_policy.caching_optimized.id
+    origin_request_policy_id = data.aws_cloudfront_origin_request_policy.s3_origin.id
+  }
+
+  logging_config {
+    bucket          = aws_s3_bucket.cloudfront_logs.bucket_domain_name
+    prefix          = "cloudfront/"
+    include_cookies = false
+  }
+
+  restrictions {
+    geo_restriction {
+      restriction_type = "none"
     }
   }
 
-  price_class = "PriceClass_100"
-
-  restrictions {
-    geo_restriction { restriction_type = "none" }
+  viewer_certificate {
+    acm_certificate_arn      = aws_acm_certificate.cloudfront_cert.arn
+    ssl_support_method       = "sni-only"
+    minimum_protocol_version = "TLSv1.2_2021"
   }
+}
 
-  viewer_certificate { cloudfront_default_certificate = true }
+data "aws_cloudfront_cache_policy" "caching_optimized" {
+  name = "Managed-CachingOptimized"
+}
+
+data "aws_cloudfront_origin_request_policy" "s3_origin" {
+  name = "Managed-CORS-S3Origin"
 }
 
 # S3 Bucket Policy for CloudFront access
@@ -742,4 +739,217 @@ resource "aws_vpc_endpoint" "s3" {
   vpc_id          = aws_vpc.victors_lab_vpc.id
   service_name    = "com.amazonaws.${var.region}.s3"
   route_table_ids = [aws_route_table.private_rt.id]
+}
+
+############################################################
+# ROUTE53 & DNS SETUP
+############################################################
+
+# Hosted Zone Data Source - Main public zone for sys-lab.xyz
+data "aws_route53_zone" "main" {
+  name         = "sys-lab.xyz"
+  private_zone = false
+}
+
+# DNS Record for CloudFront Distribution (internet.sys-lab.xyz)
+resource "aws_route53_record" "cloudfront_dns" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "internet.sys-lab.xyz"
+  type    = "A"
+
+  alias {
+    name                   = aws_cloudfront_distribution.cdn.domain_name
+    zone_id                = aws_cloudfront_distribution.cdn.hosted_zone_id
+    evaluate_target_health = false
+  }
+}
+
+# DNS Record for Application Load Balancer (crypto.sys-lab.xyz)
+resource "aws_route53_record" "alb_dns" {
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = "crypto.sys-lab.xyz"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.alb.dns_name
+    zone_id                = aws_lb.alb.zone_id
+    evaluate_target_health = true
+  }
+}
+
+############################################################
+# ACM CERTIFICATES - ALB (Regional)
+############################################################
+
+# ACM Certificate for ALB (crypto.sys-lab.xyz) - Must be in the same region as the ALB
+resource "aws_acm_certificate" "alb_cert" {
+  domain_name       = "crypto.sys-lab.xyz"
+  validation_method = "DNS"
+}
+
+# DNS Validation Records for ALB Certificate
+resource "aws_route53_record" "alb_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.alb_cert.domain_validation_options : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.value]
+}
+
+# Complete Certificate Validation for ALB
+resource "aws_acm_certificate_validation" "alb_cert_validation" {
+  certificate_arn = aws_acm_certificate.alb_cert.arn
+
+  validation_record_fqdns = [
+    for r in aws_route53_record.alb_cert_validation : r.fqdn
+  ]
+}
+
+############################################################
+# ACM CERTIFICATES - CloudFront (us-east-1 only)
+############################################################
+
+# ACM Certificate for CloudFront - Must be created in us-east-1 regardless of main region
+resource "aws_acm_certificate" "cloudfront_cert" {
+  provider          = aws.us_east_1
+  domain_name       = "sys-lab.xyz"
+  validation_method = "DNS"
+
+  subject_alternative_names = [
+    "internet.sys-lab.xyz",
+    "www.internet.sys-lab.xyz"
+  ]
+}
+
+# DNS Validation Records for CloudFront Certificate
+resource "aws_route53_record" "cloudfront_cert_validation" {
+  for_each = {
+    for dvo in aws_acm_certificate.cloudfront_cert.domain_validation_options : dvo.domain_name => {
+      name  = dvo.resource_record_name
+      value = dvo.resource_record_value
+      type  = dvo.resource_record_type
+    }
+  }
+
+  zone_id = data.aws_route53_zone.main.zone_id
+  name    = each.value.name
+  type    = each.value.type
+  ttl     = 60
+  records = [each.value.value]
+}
+
+# Complete Certificate Validation for CloudFront
+resource "aws_acm_certificate_validation" "cloudfront_cert" {
+  provider        = aws.us_east_1
+  certificate_arn = aws_acm_certificate.cloudfront_cert.arn
+
+  validation_record_fqdns = [
+    for r in aws_route53_record.cloudfront_cert_validation : r.fqdn
+  ]
+}
+
+############################################################
+# APPLICATION LOAD BALANCER LISTENERS
+############################################################
+
+# HTTPS Listener - Terminates TLS and forwards to web target group
+resource "aws_lb_listener" "https" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = 443
+  protocol          = "HTTPS"
+  ssl_policy        = "ELBSecurityPolicy-TLS13-1-2-2021-06"
+
+  certificate_arn = aws_acm_certificate.alb_cert.arn
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_tg.arn
+  }
+}
+
+# HTTP Listener - Redirects all HTTP traffic to HTTPS
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type = "redirect"
+    redirect {
+      protocol    = "HTTPS"
+      port        = "443"
+      status_code = "HTTP_301"
+    }
+  }
+}
+
+resource "aws_wafv2_web_acl" "cloudfront" {
+  provider = aws.us_east_1
+  name     = "cloudfront-waf"
+  scope    = "CLOUDFRONT"
+
+  default_action {
+    allow {}
+  }
+
+  rule {
+    name     = "AWSManagedCommonRuleSet"
+    priority = 1
+
+    override_action {
+      none {}
+    }
+
+    statement {
+      managed_rule_group_statement {
+        name        = "AWSManagedRulesCommonRuleSet"
+        vendor_name = "AWS"
+      }
+    }
+
+    visibility_config {
+      cloudwatch_metrics_enabled = true
+      metric_name                = "commonRules"
+      sampled_requests_enabled   = true
+    }
+  }
+
+  visibility_config {
+    cloudwatch_metrics_enabled = true
+    metric_name                = "cloudfrontWAF"
+    sampled_requests_enabled   = true
+  }
+}
+
+resource "aws_s3_bucket" "cloudfront_logs" {
+  bucket        = "alexrachok-cloudfront-logs"
+  force_destroy = true
+
+  tags = {
+    Name = "cloudfront-access-logs"
+  }
+}
+
+resource "aws_s3_bucket_ownership_controls" "cloudfront_logs" {
+  bucket = aws_s3_bucket.cloudfront_logs.id
+
+  rule {
+    object_ownership = "ObjectWriter"
+  }
+}
+
+resource "aws_s3_bucket_public_access_block" "cloudfront_logs" {
+  bucket                  = aws_s3_bucket.cloudfront_logs.id
+  block_public_acls       = false
+  block_public_policy     = true
+  ignore_public_acls      = false
+  restrict_public_buckets = true
 }

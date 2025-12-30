@@ -30,8 +30,8 @@ variable "ssh_public_key" {
 variable "allowed_cidr" {
   description = "CIDR block allowed to access NLB"
   type        = string
-  #default     = "31.146.15.0/24" //Tbilisi, home
-  default = "5.152.109.0/24" //Batumi, home
+  default     = "31.146.15.0/24" //Tbilisi, home
+  #default = "5.152.109.0/24" //Batumi, home
 }
 
 variable "region" {

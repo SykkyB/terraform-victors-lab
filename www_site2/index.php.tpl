@@ -12,6 +12,7 @@ $conn_string = "host=$db_host port=$db_port dbname=$db_name user=$db_user passwo
 $db_conn = pg_connect($conn_string);
 
 date_default_timezone_set('Asia/Tbilisi');
+
 // ---------------------------
 // Helper functions
 // ---------------------------
@@ -19,25 +20,25 @@ function format_rate($value) {
     return rtrim(rtrim(number_format((float)$value, 8, '.', ''), '0'), '.');
 }
 
-function format_time($date_str, $time_str) {
-    // Combine DATE + TIME from DB
-    $dt = new DateTime("$date_str $time_str", new DateTimeZone("UTC"));
-    // Convert to your timezone
-    $dt->setTimezone(new DateTimeZone("Asia/Tbilisi"));
-    return $dt->format("H:i:s");
-}
+// ---------------------------
+// Init vars
+// ---------------------------
+$db_status = "";
+$latest_text = "";
+$history_text = "";
+$chart_data = [];
 
 // ---------------------------
-// Fetch Latest Crypto Rates
+// DB logic
 // ---------------------------
 if (!$db_conn) {
     $db_status = "❌ Failed to connect to Postgres DB: " . pg_last_error();
-    $latest_text = "";
-    $history_text = "";
 } else {
     $db_status = "✅ Postgres DB connected successfully.";
 
+    // ---------------------------
     // Latest rate
+    // ---------------------------
     $query_latest = "
         SELECT *
         FROM public.crypto_rates
@@ -46,16 +47,13 @@ if (!$db_conn) {
     ";
     $result_latest = pg_query($db_conn, $query_latest);
 
-    if (!$result_latest) {
-        $latest_text = "Query failed: " . pg_last_error();
-    } elseif (pg_num_rows($result_latest) == 0) {
-        $latest_text = "No crypto rates found.";
-    } else {
+    if ($result_latest && pg_num_rows($result_latest) > 0) {
         $row = pg_fetch_assoc($result_latest);
+
         $latest_text = "
             <div class='db-box'>
                 <h2>Latest Crypto Rates</h2>
-                <table border='1' cellpadding='8' cellspacing='0'>
+                <table>
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -69,10 +67,10 @@ if (!$db_conn) {
                         <tr>
                             <td>{$row['rate_date']}</td>
                             <td class='utc-time'
-                              data-date=\"{$row['rate_date']}\"
-                              data-time=\"{$row['rate_time']}\">
-                              {$row['rate_time']}
-                           </td>
+                                data-date=\"{$row['rate_date']}\"
+                                data-time=\"{$row['rate_time']}\">
+                                {$row['rate_time']}
+                            </td>
                             <td>" . format_rate($row['btc_usd']) . "</td>
                             <td>" . format_rate($row['eth_usd']) . "</td>
                             <td>" . format_rate($row['sol_usd']) . "</td>
@@ -83,7 +81,38 @@ if (!$db_conn) {
         ";
     }
 
-    // Previous 10 records for history
+    // ---------------------------
+    // Chart data (last 24h)
+    // ---------------------------
+    $query_chart = "
+        SELECT rate_date, rate_time, btc_usd, eth_usd, sol_usd
+        FROM public.crypto_rates
+        WHERE (rate_date + rate_time) >= (NOW() - INTERVAL '24 hours')
+        ORDER BY rate_date, rate_time;
+    ";
+
+    $result_chart = pg_query($db_conn, $query_chart);
+
+    if ($result_chart) {
+        while ($row = pg_fetch_assoc($result_chart)) {
+            $dt = new DateTime(
+                $row['rate_date'] . ' ' . substr($row['rate_time'], 0, 8),
+                new DateTimeZone("UTC")
+            );
+            $dt->setTimezone(new DateTimeZone("Asia/Tbilisi"));
+
+            $chart_data[] = [
+                "time" => $dt->format("H:i"),
+                "btc"  => (float)$row['btc_usd'],
+                "eth"  => (float)$row['eth_usd'],
+                "sol"  => (float)$row['sol_usd'],
+            ];
+        }
+    }
+
+    // ---------------------------
+    // History (previous 10)
+    // ---------------------------
     $query_history = "
         SELECT *
         FROM public.crypto_rates
@@ -91,13 +120,14 @@ if (!$db_conn) {
         OFFSET 1
         LIMIT 10;
     ";
+
     $result_history = pg_query($db_conn, $query_history);
 
     if ($result_history && pg_num_rows($result_history) > 0) {
         $history_text = "
             <div class='db-box'>
                 <h2>Exchange Rate History (Previous 10 Records)</h2>
-                <table border='1' cellpadding='8' cellspacing='0'>
+                <table>
                     <thead>
                         <tr>
                             <th>Date</th>
@@ -109,117 +139,129 @@ if (!$db_conn) {
                     </thead>
                     <tbody>
         ";
-        while ($row_hist = pg_fetch_assoc($result_history)) {
+
+        while ($row = pg_fetch_assoc($result_history)) {
             $history_text .= "
                 <tr>
-                    <td>{$row_hist['rate_date']}</td>
+                    <td>{$row['rate_date']}</td>
                     <td class='utc-time'
-                      data-date=\"{$row_hist['rate_date']}\"
-                      data-time=\"{$row_hist['rate_time']}\">
-                      {$row_hist['rate_time']}
-                   </td>
-                    <td>" . format_rate($row_hist['btc_usd']) . "</td>
-                    <td>" . format_rate($row_hist['eth_usd']) . "</td>
-                    <td>" . format_rate($row_hist['sol_usd']) . "</td>
+                        data-date=\"{$row['rate_date']}\"
+                        data-time=\"{$row['rate_time']}\">
+                        {$row['rate_time']}
+                    </td>
+                    <td>" . format_rate($row['btc_usd']) . "</td>
+                    <td>" . format_rate($row['eth_usd']) . "</td>
+                    <td>" . format_rate($row['sol_usd']) . "</td>
                 </tr>
             ";
         }
-        $history_text .= "
-                    </tbody>
-                </table>
-            </div>
-        ";
-    } else {
-        $history_text = "<div class='db-box'><p>No historical records found.</p></div>";
+
+        $history_text .= "</tbody></table></div>";
     }
 
     pg_close($db_conn);
 }
 ?>
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Welcome to My AWS Website with RDS</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background: #f4f4f4;
-      color: #333;
-      margin: 0;
-      padding: 40px;
-      text-align: center;
-    }
-    .container {
-      background: white;
-      padding: 30px;
-      border-radius: 12px;
-      max-width: 700px;
-      margin: auto;
-      box-shadow: 0 4px 10px rgba(0,0,0,0.1);
-    }
-    .db-box {
-      background: #eef7ff;
-      padding: 20px;
-      border-radius: 10px;
-      margin-top: 25px;
-      font-size: 18px;
-      text-align: left;
-    }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-    }
-    th, td {
-      padding: 8px;
-      border: 1px solid #ccc;
-      text-align: center;
-    }
-    th {
-      background: #eef7ff;
-    }
-    img {
-      max-width: 100%;
-      border-radius: 8px;
-      margin-bottom: 20px;
-    }
-  </style>
+<meta charset="UTF-8">
+<title>Crypto Rates Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+<style>
+body {
+    font-family: Arial, sans-serif;
+    background: #f4f4f4;
+    padding: 40px;
+}
+.container {
+    background: #fff;
+    max-width: 900px;
+    margin: auto;
+    padding: 30px;
+    border-radius: 12px;
+}
+.db-box {
+    background: #eef7ff;
+    padding: 20px;
+    border-radius: 10px;
+    margin-top: 25px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+th, td {
+    padding: 8px;
+    border: 1px solid #ccc;
+    text-align: center;
+}
+th {
+    background: #ddeeff;
+}
+</style>
 </head>
+
 <body>
-  <div class="container">
-    <img src="<?= "${cloudfront_url}web_site2/images/crypto.jpg" ?>" alt="Crypto Image" />
-    <h1>Welcome to My AWS Website with RDS!</h1>
-    <p>This page is running on EC2 → Private RDS PostgreSQL → Terraform-managed infrastructure.</p>
+<div class="container">
 
-    <div class="db-box">
-        <strong>DB Status:</strong> <?= $db_status ?>
-    </div>
+<img src="<?= "${cloudfront_url}web_site2/images/crypto.jpg" ?>" style="max-width:100%;border-radius:10px">
 
-    <?= $latest_text ?>
-    <?= $history_text ?>
-  </div>
+<h1>Crypto Rates Dashboard</h1>
+<p>EC2 → RDS PostgreSQL → Terraform-managed infra</p>
 
-  <script>
-    document.addEventListener("DOMContentLoaded", function () {
-        const cells = document.querySelectorAll(".utc-time");
+<div class="db-box"><strong>DB Status:</strong> <?= $db_status ?></div>
 
-        cells.forEach(cell => {
-            const date = cell.getAttribute("data-date");
-            const time = cell.getAttribute("data-time").substring(0, 8);
+<?= $latest_text ?>
 
-            const utcString = date + "T" + time + "Z"; 
-            const localDate = new Date(utcString);
+<!-- 🔥 GRAPH AFTER LATEST -->
+<div class="db-box">
+    <h2>Crypto Rates – Last 24 Hours</h2>
+    <canvas id="cryptoChart" height="120"></canvas>
+</div>
 
-            const localTime = localDate.toLocaleTimeString([], {
-                hour: "2-digit",
-                minute: "2-digit",
-                second: "2-digit"
-            });
+<?= $history_text ?>
 
-            cell.textContent = localTime;
-        });
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function () {
+
+    // Convert UTC time in tables
+    document.querySelectorAll(".utc-time").forEach(cell => {
+        const d = cell.dataset.date;
+        const t = cell.dataset.time.substring(0,8);
+        const dt = new Date(d + "T" + t + "Z");
+        cell.textContent = dt.toLocaleTimeString();
     });
-  </script>
+
+    // Chart
+    const data = <?= json_encode($chart_data); ?>;
+
+    const labels = data.map(p => p.time);
+
+    new Chart(document.getElementById("cryptoChart"), {
+        type: "line",
+        data: {
+            labels,
+            datasets: [
+                { label: "BTC/USD", data: data.map(p=>p.btc), borderColor:"#f7931a", tension:0.3 },
+                { label: "ETH/USD", data: data.map(p=>p.eth), borderColor:"#3c3c3d", tension:0.3 },
+                { label: "SOL/USD", data: data.map(p=>p.sol), borderColor:"#00ffa3", tension:0.3 }
+            ]
+        },
+        options: {
+            responsive: true,
+            interaction: { mode: "index", intersect: false },
+            scales: { x: { ticks: { maxTicksLimit: 12 } } }
+        }
+    });
+});
+</script>
+
 </body>
 </html>

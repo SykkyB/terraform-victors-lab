@@ -2,14 +2,22 @@
 # OUTPUTS
 ############################################################
 
-# ---------------- Network Load Balancer (NLB) ----------------
+# ---------------- Load Balancers ----------------
+
+output "alb_dns_name" {
+  description = "DNS name of the Application Load Balancer"
+  value       = aws_lb.alb.dns_name
+}
+
 output "nlb_dns_name" {
-  description = "DNS name of the Network Load Balancer"
+  description = "DNS name of the Network Load Balancer (SSH Bastion)"
   value       = aws_lb.nlb.dns_name
 }
 
-output "ssh_bastion_connection_command" {
-  description = "SSH command to connect via NLB"
+# ---------------- SSH ----------------
+
+output "ssh_bastion_command" {
+  description = "SSH command to connect to Bastion via NLB"
   value       = "ssh -p 2000 -i keys/aws_key ubuntu@${aws_lb.nlb.dns_name}"
 }
 
@@ -18,41 +26,48 @@ output "ssh_webserver_via_bastion" {
   value       = "ssh -i keys/aws_key -J ubuntu@${aws_lb.nlb.dns_name}:2000 spiderman@<private-ip-from-aws-console>"
 }
 
-# ---------------- S3 + CloudFront ----------------
-output "s3_bucket_name" {
-  description = "The name of the S3 bucket hosting static website content"
-  value       = aws_s3_bucket.static_web_site_bucket.bucket
+
+# ---------------- CloudFront & S3 ----------------
+
+output "cloudfront_domain" {
+  description = "CloudFront distribution domain"
+  value       = aws_cloudfront_distribution.cdn.domain_name
 }
 
 output "cloudfront_url" {
-  description = "Full CloudFront website URL"
-  value       = "https://${aws_cloudfront_distribution.cdn.domain_name}/"
+  description = "Public CloudFront URL"
+  value       = "https://internet.sys-lab.xyz/"
 }
 
-# ---------------- Application Connection Info ----------------
-output "alb_dns_name" {
-  description = "DNS name of the public ALB"
-  value       = aws_lb.alb.dns_name
+output "s3_bucket_name" {
+  description = "S3 bucket for static website content"
+  value       = aws_s3_bucket.static_web_site_bucket.bucket
 }
 
-output "web_server_public_url" {
-  description = "Public URL to access your private web server via ALB"
-  value       = "http://${aws_lb.alb.dns_name}/index.php"
+# ---------------- Application ----------------
+
+output "alb_application_url" {
+  description = "Application URL via ALB (crypto site)"
+  value       = "https://crypto.sys-lab.xyz/"
 }
 
-output "web_server_healthpage_url" {
-  description = "Public URL to access your private web server via ALB"
-  value       = "http://${aws_lb.alb.dns_name}/healthcheck.html"
+# ---------------- Database ----------------
+
+output "rds_endpoint" {
+  description = "PostgreSQL RDS endpoint"
+  value       = aws_db_instance.postgres.address
 }
 
+############################################################
+# DNS (Custom Domains)
+############################################################
 
-output "web_server_public_url_static" {
-  description = "Public URL to access static content on ALB"
-  value       = "http://${aws_lb.alb.dns_name}/"
+output "cloudfront_custom_domain" {
+  description = "Custom domain pointing to CloudFront (static website)"
+  value       = "https://internet.sys-lab.xyz"
 }
 
-# ---------------- Lambda ----------------
-output "lambda_name" {
-  description = "Name of the crypto updater Lambda function"
-  value       = aws_lambda_function.crypto_updater.function_name
+output "alb_custom_domain" {
+  description = "Custom domain pointing to Application Load Balancer (app)"
+  value       = "https://crypto.sys-lab.xyz"
 }

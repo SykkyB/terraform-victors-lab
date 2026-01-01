@@ -55,17 +55,14 @@ def insert_into_db(btc, eth, sol):
         print(f"[{datetime.utcnow()}] Error inserting into DB: {e}")
 
 def main():
-    while True:
-        btc = get_price("BTC")
-        eth = get_price("ETH")
-        sol = get_price("SOL")
+    btc = get_price("BTC")
+    eth = get_price("ETH")
+    sol = get_price("SOL")
 
-        if btc is not None and eth is not None and sol is not None:
-            insert_into_db(btc, eth, sol)
-        else:
-            print(f"[{datetime.utcnow()}] Skipping DB insert due to missing data.")
-
-        time.sleep(600)  # 10 min interval
+    if btc and eth and sol:
+        insert_into_db(btc, eth, sol)
+    else:
+        print("Skipping insert")
 
 if __name__ == "__main__":
     main()

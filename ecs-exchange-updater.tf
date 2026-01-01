@@ -95,24 +95,6 @@ resource "aws_ecs_task_definition" "exchange_task" {
 }
 
 ############################################################
-# ECS SERVICE (NO LOAD BALANCER, RUN IN SCHEDULED MODE)
-############################################################
-
-resource "aws_ecs_service" "exchange_service" {
-  name            = "exchange-updater-service"
-  cluster         = aws_ecs_cluster.exchange_cluster.id
-  task_definition = aws_ecs_task_definition.exchange_task.arn
-  desired_count   = 1
-  launch_type     = "FARGATE"
-
-  network_configuration {
-    security_groups  = [aws_security_group.sg_ecs_updater.id]
-    subnets          = [aws_subnet.private.id, aws_subnet.private_2.id]
-    assign_public_ip = false
-  }
-}
-
-############################################################
 # SCHEDULE TASK TO RUN EVERY 5 MINUTES (REPLACE LAMBDA CRON)
 ############################################################
 
@@ -124,7 +106,7 @@ resource "aws_cloudwatch_event_rule" "ecs_schedule" {
 resource "aws_cloudwatch_event_target" "ecs_schedule_target" {
   rule     = aws_cloudwatch_event_rule.ecs_schedule.name
   arn      = aws_ecs_cluster.exchange_cluster.arn
-  role_arn = aws_iam_role.ecs_task_execution_role.arn
+  role_arn = aws_iam_role.eventbridge_ecs_role.arn
 
   ecs_target {
     task_definition_arn = aws_ecs_task_definition.exchange_task.arn
@@ -144,3 +126,39 @@ resource "aws_cloudwatch_log_group" "exchange_updater" {
   retention_in_days = 14
 }
 
+resource "aws_iam_role" "eventbridge_ecs_role" {
+  name = "eventbridge-ecs-run-task"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [{
+      Effect = "Allow"
+      Principal = {
+        Service = "events.amazonaws.com"
+      }
+      Action = "sts:AssumeRole"
+    }]
+  })
+}
+
+resource "aws_iam_role_policy" "eventbridge_ecs_policy" {
+  role = aws_iam_role.eventbridge_ecs_role.id
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "ecs:RunTask"
+        ]
+        Resource = aws_ecs_task_definition.exchange_task.arn
+      },
+      {
+        Effect = "Allow"
+        Action = "iam:PassRole"
+        Resource = aws_iam_role.ecs_task_execution_role.arn
+      }
+    ]
+  })
+}
